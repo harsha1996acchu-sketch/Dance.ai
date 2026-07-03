@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dance Mirror — Proof of Concept</title>
+<style>
+  :root {
+    --ink: #0d0f0c;
+    --paper: #f2efe6;
+    --line: #2f6f4f;
+    --guide: #5ee2ff;
+    --muted: #7a8577;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    height: 100%;
+    overflow: hidden;
+  }
+  #stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+  }
+  video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  video {
+    transform: scaleX(-1);
+  }
+  #ui {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: env(safe-area-inset-top, 16px) 16px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
+    z-index: 10;
+    pointer-events: none;
+  }
+  #title {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  #status {
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.15);
+    max-width: 55vw;
+    text-align: right;
+    word-break: break-word;
+  }
+  #status.ready { color: #9be3a8; border-color: rgba(155,227,168,0.4); }
+  #status.loading { color: #e3c99b; }
+  #status.error { color: #e39b9b; }
+
+  #bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 16px env(safe-area-inset-bottom, 16px);
+    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #legend {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+  }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .dot.you { background: var(--line); }
+  .dot.guide { background: var(--guide); }
+
+  #startBtn {
+    -webkit-appearance: none;
+    border: none;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 14px;
+    border-radius: 10px;
+    letter-spacing: 0.01em;
+  }
+  #startBtn:active { opacity: 0.8; }
+
+  #startScreen {
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 32px;
+    text-align: center;
+  }
+  #startScreen h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  #startScreen p {
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 320px;
+    line-height: 1.5;
+    margin: 0 0 28px;
+  }
+  .hidden { display: none !important; }
+
+  .overlayScreen {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(13,15,12,0.88);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 32px;
+    text-align: center;
+  }
+  .overlayScreen h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .overlayScreen p {
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 300px;
+    line-height: 1.5;
+    margin: 0 0 24px;
+  }
+
+  #danceList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .danceOption {
+    -webkit-appearance: none;
+    border: 1px solid rgba(94,226,255,0.35);
+    background: rgba(94,226,255,0.08);
+    color: var(--paper);
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .danceOption:active { background: rgba(94,226,255,0.18); }
+  .danceOption .sub {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  #replayBtn, #pickAnotherBtn {
+    -webkit-appearance: none;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 13px 20px;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 8px;
+  }
+  #pickAnotherBtn { background: var(--paper); color: var(--ink); }
+  #replayBtn.ghostBtn {
+    background: transparent;
+    border: 1px solid rgba(242,239,230,0.3);
+    color: var(--paper);
+  }
+
+  #danceProgressWrap {
+    margin-bottom: 2px;
+  }
+  #danceProgressBar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    overflow: hidden;
+    margin-bottom: 5px;
+  }
+  #danceProgressFill {
+    height: 100%;
+    width: 0%;
+    background: var(--guide);
+  }
+  #danceTimeLabel {
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>Dance Mirror</h1>
+  <p>Proof-of-concept test. Uses your camera and an offline pose model to mirror you and overlay a guide skeleton. Nothing leaves your phone.</p>
+  <button id="startBtn">Start camera</button>
+</div>
+
+<div id="stage" class="hidden">
+  <div id="ui">
+    <div id="title">Dance Mirror — Test</div>
+    <div id="status" class="loading">Loading model…</div>
+  </div>
+
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div id="selectScreen" class="overlayScreen hidden">
+    <h1>Choose a dance</h1>
+    <p>Each guide runs for about 25 seconds. Follow the cyan figure.</p>
+    <div id="danceList"></div>
+  </div>
+
+  <div id="doneScreen" class="overlayScreen hidden">
+    <h1>Dance complete</h1>
+    <p id="doneDanceName"></p>
+    <button id="replayBtn" class="ghostBtn">Replay this dance</button>
+    <button id="pickAnotherBtn">Choose another dance</button>
+  </div>
+
+  <div id="bottom">
+    <div id="danceProgressWrap" class="hidden">
+      <div id="danceProgressBar"><div id="danceProgressFill"></div></div>
+      <div id="danceTimeLabel">0:00 / 0:00</div>
+    </div>
+    <div id="legend">
+      <span><span class="dot guide"></span>AI Guide</span>
+      <span><span class="dot you"></span>You</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const stage = document.getElementById('stage');
+const video = document.getElementById('video');
+const canvas = document.getElementById('overlay');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const selectScreen = document.getElementById('selectScreen');
+const danceListEl = document.getElementById('danceList');
+const doneScreen = document.getElementById('doneScreen');
+const doneDanceNameEl = document.getElementById('doneDanceName');
+const replayBtn = document.getElementById('replayBtn');
+const pickAnotherBtn = document.getElementById('pickAnotherBtn');
+const danceProgressWrap = document.getElementById('danceProgressWrap');
+const danceProgressFill = document.getElementById('danceProgressFill');
+const danceTimeLabel = document.getElementById('danceTimeLabel');
+
+let detector = null;
+let running = false;
+
+// --- Placeholder "reference dances" ---
+// These are simplified, generic movement patterns used ONLY to test the
+// mirror + overlay + selection mechanic. They are NOT authentic
+// choreography — real keypoint sequences from Harsha's dance dataset
+// will replace these once ready.
+const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','right_elbow',
+  'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+
+function makeGuidePoseFn({ period, armAmp, hipAmp, style }) {
+  return function (t) {
+    const phase = (t % period) / period;
+    const wave = Math.sin(phase * Math.PI * 2);
+    const hipWave = Math.sin(phase * Math.PI * 2 + 0.6);
+    const cx = 0.5 + (style === 'sway' ? hipAmp * 0.4 * hipWave : 0);
+    const hipY = 0.62, shY = 0.4;
+
+    // staccato style holds briefly at peaks instead of smooth sine
+    const w = style === 'staccato' ? Math.sign(wave) * Math.min(1, Math.abs(wave) * 2.2) : wave;
+
+    return {
+      nose:           { x: cx + (style === 'sway' ? 0.02*hipWave : 0), y: 0.28 - (style==='sway'?0.01*wave:0) },
+      left_shoulder:  { x: cx-0.09, y: shY + (style==='sway'? 0.01*hipWave : 0) },
+      right_shoulder: { x: cx+0.09, y: shY - (style==='sway'? 0.01*hipWave : 0) },
+      left_elbow:     { x: cx-0.15, y: shY - armAmp*0.55*w },
+      right_elbow:    { x: cx+0.15, y: shY + armAmp*0.55*w },
+      left_wrist:     { x: cx-0.18 + (style==='circular'? 0.05*Math.cos(phase*Math.PI*2):0), y: shY - armAmp*w },
+      right_wrist:    { x: cx+0.18 + (style==='circular'? 0.05*Math.cos(phase*Math.PI*2+Math.PI):0), y: shY + armAmp*w },
+      left_hip:       { x: cx-0.08, y: hipY },
+      right_hip:      { x: cx+0.08, y: hipY },
+      left_knee:      { x: cx-0.09 + hipAmp*0.3*hipWave, y: hipY + 0.16 },
+      right_knee:     { x: cx+0.09 + hipAmp*0.3*hipWave, y: hipY + 0.16 },
+      left_ankle:     { x: cx-0.10, y: hipY + 0.32 },
+      right_ankle:    { x: cx+0.10, y: hipY + 0.32 },
+    };
+  };
+}
+
+const DANCES = [
+  {
+    id: 'bhangra',
+    name: 'Bhangra (placeholder)',
+    sub: 'Punjab · energetic, fast shoulder & arm movement',
+    duration: 25,
+    poseFn: makeGuidePoseFn({ period: 1.4, armAmp: 0.24, hipAmp: 0.4, style: 'staccato' }),
+  },
+  {
+    id: 'garba',
+    name: 'Garba (placeholder)',
+    sub: 'Gujarat · circular sway, rhythmic steps',
+    duration: 25,
+    poseFn: makeGuidePoseFn({ period: 2.8, armAmp: 0.16, hipAmp: 0.5, style: 'sway' }),
+  },
+  {
+    id: 'kathak',
+    name: 'Kathak (placeholder)',
+    sub: 'North India · sharp turns, precise holds',
+    duration: 25,
+    poseFn: makeGuidePoseFn({ period: 2.0, armAmp: 0.20, hipAmp: 0.15, style: 'staccato' }),
+  },
+  {
+    id: 'odissi',
+    name: 'Odissi (placeholder)',
+    sub: 'Odisha · slow, graceful curves',
+    duration: 25,
+    poseFn: makeGuidePoseFn({ period: 4.5, armAmp: 0.14, hipAmp: 0.3, style: 'circular' }),
+  },
+];
+
+let currentDance = null;
+let danceStartTime = null;
+let danceFinished = false;
+
+const SKELETON_PAIRS = [
+  ['left_shoulder','right_shoulder'],
+  ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+  ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
+  ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+  ['left_hip','right_hip'],
+  ['left_hip','left_knee'],['left_knee','left_ankle'],
+  ['right_hip','right_knee'],['right_knee','right_ankle'],
+];
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function populateDanceList() {
+  danceListEl.innerHTML = '';
+  DANCES.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'danceOption';
+    btn.innerHTML = `${d.name}<span class="sub">${d.sub} · ${formatTime(d.duration)}</span>`;
+    btn.addEventListener('click', () => startDance(d));
+    danceListEl.appendChild(btn);
+  });
+}
+
+function startDance(dance) {
+  currentDance = dance;
+  danceStartTime = performance.now() / 1000;
+  danceFinished = false;
+  selectScreen.classList.add('hidden');
+  doneScreen.classList.add('hidden');
+  danceProgressWrap.classList.remove('hidden');
+}
+
+function finishDance() {
+  danceFinished = true;
+  danceProgressWrap.classList.add('hidden');
+  doneDanceNameEl.textContent = currentDance.name + ' finished';
+  doneScreen.classList.remove('hidden');
+}
+
+replayBtn.addEventListener('click', () => startDance(currentDance));
+pickAnotherBtn.addEventListener('click', () => {
+  doneScreen.classList.add('hidden');
+  selectScreen.classList.remove('hidden');
+});
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+async function setupCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false
+  });
+  video.srcObject = stream;
+  return new Promise((resolve, reject) => {
+    video.onloadedmetadata = async () => {
+      try {
+        await video.play();
+        resolve(video);
+      } catch (e) {
+        reject(e);
+      }
+    };
+  });
+}
+
+async function loadModel() {
+  await tf.setBackend('webgl');
+  await tf.ready();
+  detector = await poseDetection.createDetector(
+    poseDetection.SupportedModels.MoveNet,
+    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+  );
+}
+
+// Robotic / wireframe render for the AI guide — angular joints, precise
+// thin lines, cyan palette. Deliberately reads as synthetic/computed,
+// in contrast to the participant's own organic tracked body.
+function drawGuideSkeleton(joints, w, h, t) {
+  const px = (nx) => nx * w;
+  ctx.save();
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+
+  const CYAN = 'rgba(94, 226, 255, 0.9)';
+  const CYAN_DIM = 'rgba(94, 226, 255, 0.35)';
+
+  // thin precise limb lines
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.strokeStyle = CYAN;
+    ctx.shadowColor = CYAN;
+    ctx.shadowBlur = 6;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), ja.y * h);
+    ctx.lineTo(px(jb.x), jb.y * h);
+    ctx.stroke();
+  });
+
+  // angular joint markers (diamonds) instead of soft dots
+  Object.entries(joints).forEach(([name, j]) => {
+    const x = px(j.x), y = j.y * h;
+    const s = name === 'nose' ? 9 : 5;
+    ctx.fillStyle = CYAN;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s, y);
+    ctx.lineTo(x, y + s);
+    ctx.lineTo(x - s, y);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  // scanning pulse line sweeping down the figure — signals "computed"
+  ctx.shadowBlur = 0;
+  const sweepY = ((t * 0.25) % 1) * h;
+  const grad = ctx.createLinearGradient(0, sweepY - 30, 0, sweepY + 30);
+  grad.addColorStop(0, 'rgba(94,226,255,0)');
+  grad.addColorStop(0.5, 'rgba(94,226,255,0.5)');
+  grad.addColorStop(1, 'rgba(94,226,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, sweepY - 30, w, 60);
+
+  ctx.restore();
+}
+
+// Sharper, clearer render for the participant's own tracked body —
+// stays legible/technical since this is feedback, not the "spirit" guide
+function drawUserSkeleton(joints, w, h) {
+  const px = (nx) => (1 - nx) * w; // mirrored
+  ctx.save();
+  ctx.strokeStyle = 'rgba(47,111,79,0.85)';
+  ctx.fillStyle = 'rgba(47,111,79,0.85)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), ja.y * h);
+    ctx.lineTo(px(jb.x), jb.y * h);
+    ctx.stroke();
+  });
+  Object.values(joints).forEach(j => {
+    ctx.beginPath();
+    ctx.arc(px(j.x), j.y * h, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function keypointsToNamed(keypoints) {
+  const map = {};
+  keypoints.forEach(kp => {
+    if (kp.score > 0.35) {
+      map[kp.name] = { x: kp.x / video.videoWidth, y: kp.y / video.videoHeight };
+    }
+  });
+  return map;
+}
+
+async function renderLoop() {
+  if (!running) return;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const now = performance.now() / 1000;
+
+  if (currentDance && !danceFinished) {
+    const elapsed = now - danceStartTime;
+    if (elapsed >= currentDance.duration) {
+      finishDance();
+    } else {
+      const guide = currentDance.poseFn(elapsed);
+      drawGuideSkeleton(guide, w, h, elapsed);
+      const pct = Math.min(100, (elapsed / currentDance.duration) * 100);
+      danceProgressFill.style.width = pct + '%';
+      danceTimeLabel.textContent = `${formatTime(elapsed)} / ${formatTime(currentDance.duration)}`;
+    }
+  }
+
+  // Live detected pose — kept sharper/clearer since it's your own feedback
+  try {
+    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
+    if (poses[0]) {
+      const named = keypointsToNamed(poses[0].keypoints);
+      drawUserSkeleton(named, w, h);
+    }
+  } catch (e) {
+    // skip frame on transient error
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+startBtn.addEventListener('click', async () => {
+  try {
+    startScreen.classList.add('hidden');
+    stage.classList.remove('hidden');
+    resizeCanvas();
+
+    setStatus('Starting camera…', 'loading');
+    await setupCamera();
+
+    setStatus('Loading model…', 'loading');
+    await loadModel();
+
+    setStatus('Live', 'ready');
+    running = true;
+    populateDanceList();
+    selectScreen.classList.remove('hidden');
+    renderLoop();
+  } catch (err) {
+    const msg = (err && (err.message || err.name)) ? (err.name + ': ' + err.message) : String(err);
+    setStatus(msg, 'error');
+    console.error(err);
+  }
+});
+</script>
+
+</body>
+</html>
