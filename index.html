@@ -150,6 +150,24 @@
   }
   #layoutToggle:active { background: rgba(94,226,255,0.25); }
 
+  #filterToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 82px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(255,180,120,0.5);
+    background: rgba(255,180,120,0.14);
+    color: #ffd9b0;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #filterToggle:active { background: rgba(255,180,120,0.28); }
+
   .overlayScreen {
     position: absolute;
     inset: 0;
@@ -258,6 +276,7 @@
   </div>
 
   <button id="layoutToggle" class="hidden">Guide: Beside</button>
+  <button id="filterToggle" class="hidden">Face: Thermal</button>
 
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
@@ -308,14 +327,25 @@ const danceProgressWrap = document.getElementById('danceProgressWrap');
 const danceProgressFill = document.getElementById('danceProgressFill');
 const danceTimeLabel = document.getElementById('danceTimeLabel');
 const layoutToggle = document.getElementById('layoutToggle');
+const filterToggle = document.getElementById('filterToggle');
 
 let detector = null;
 let running = false;
 let layoutMode = 'beside'; // 'beside' or 'overlay'
 
+const FILTER_MODES = ['thermal', 'negative', 'pixel'];
+const FILTER_LABELS = { thermal: 'Face: Thermal', negative: 'Face: Negative', pixel: 'Face: Pixelate' };
+let faceFilterMode = 'thermal';
+
 layoutToggle.addEventListener('click', () => {
   layoutMode = layoutMode === 'beside' ? 'overlay' : 'beside';
   layoutToggle.textContent = layoutMode === 'beside' ? 'Guide: Beside' : 'Guide: Overlay';
+});
+
+filterToggle.addEventListener('click', () => {
+  const i = FILTER_MODES.indexOf(faceFilterMode);
+  faceFilterMode = FILTER_MODES[(i + 1) % FILTER_MODES.length];
+  filterToggle.textContent = FILTER_LABELS[faceFilterMode];
 });
 
 // --- Placeholder "reference dances" ---
@@ -694,89 +724,135 @@ function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
   ctx.restore();
 }
 
-// Persistent particle field for the privacy dissolve (created once).
-// Each particle has a stable position within a unit face-ellipse plus a
-// horizontal streak length, so the effect shimmers softly rather than
-// re-randomizing every frame.
-const PRIVACY_PARTICLES = (() => {
-  const arr = [];
-  for (let i = 0; i < 90; i++) {
-    const ang = Math.random() * Math.PI * 2;
-    const rad = Math.pow(Math.random(), 0.7); // denser toward center = occludes face
-    arr.push({
-      ux: Math.cos(ang) * rad * 0.5,     // -0.5..0.5 within face box
-      uy: Math.sin(ang) * rad * 0.65,
-      streak: Math.random() * 0.9,       // how far it disperses sideways
-      size: 0.5 + Math.random() * 1.8,
-      drift: Math.random() * Math.PI * 2,
-    });
-  }
-  return arr;
-})();
+// Offscreen canvas used to sample + filter the face region pixels.
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
-// PRIVACY MODE: instead of showing/recording the participant's face, it is
-// dissolved into a shifting cloud of pale particles + streaks — the
-// "borrowed body" look. The face is always occluded, so no identity is
-// visible. 2D + keypoint-based, so it stays Raspberry-Pi feasible.
-function drawPrivacyDissolve(joints, w, h, t) {
-  const px = (nx) => (1 - nx) * w; // mirrored to match user
-  const py = (ny) => ny * h;
+// Thermal color ramp: map brightness (0-255) to a cold->hot color.
+function thermalColor(L) {
+  const t = L / 255;
+  // stops: deep blue -> blue -> red -> yellow -> white
+  const stops = [
+    [0.0,  10, 0,  60],
+    [0.25, 20, 0, 230],
+    [0.5, 230, 0,  40],
+    [0.75,255,200, 0],
+    [1.0, 255,255,255],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i], b = stops[i+1];
+    if (t >= a[0] && t <= b[0]) {
+      const f = (t - a[0]) / (b[0] - a[0]);
+      return [a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, a[3]+(b[3]-a[3])*f];
+    }
+  }
+  return [255,255,255];
+}
+
+// PRIVACY MODE: the participant's face region is sampled and run through a
+// camera-style filter (thermal / negative / pixelate) so the actual face
+// is never shown — only an abstracted, unrecognizable version. Processing
+// is local and nothing is stored. Small region only, so it stays light.
+function drawPrivacyFilter(joints, w, h, mode) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
 
   const nose = joints.nose;
   if (!nose) return;
   const le = joints.left_eye, re = joints.right_eye;
+  const lear = joints.left_ear, rear = joints.right_ear;
 
-  let cxp, cyp, faceW, angle;
-  if (le && re) {
-    const lx = px(le.x), ly = py(le.y);
-    const rx = px(re.x), ry = py(re.y);
-    cxp = (lx + rx) / 2;
-    cyp = (ly + ry) / 2;
-    faceW = Math.hypot(rx - lx, ry - ly) * 3.0;
-    angle = Math.atan2(ry - ly, rx - lx);
-  } else {
-    cxp = px(nose.x); cyp = py(nose.y);
-    faceW = faceScaleRef(joints, h); angle = 0;
+  // face half-width (normalized) from eyes, else ears, else default
+  let halfW;
+  if (le && re) halfW = Math.hypot(le.x-re.x, le.y-re.y) * 1.7;
+  else if (lear && rear) halfW = Math.hypot(lear.x-rear.x, lear.y-rear.y) * 0.95;
+  else halfW = 0.12;
+  halfW = Math.max(0.06, Math.min(0.28, halfW));
+
+  const cx = nose.x, cy = nose.y;
+  // normalized face box (a bit taller than wide)
+  let nx0 = cx - halfW, ny0 = cy - halfW*1.15;
+  let nw = halfW*2, nh = halfW*2.35;
+  // clamp
+  nx0 = Math.max(0, nx0); ny0 = Math.max(0, ny0);
+  nw = Math.min(1 - nx0, nw); nh = Math.min(1 - ny0, nh);
+
+  const bx = Math.floor(nx0*vw), by = Math.floor(ny0*vh);
+  const bw = Math.max(2, Math.floor(nw*vw)), bh = Math.max(2, Math.floor(nh*vh));
+
+  offCanvas.width = bw; offCanvas.height = bh;
+  offCtx.drawImage(video, bx, by, bw, bh, 0, 0, bw, bh);
+
+  let img;
+  try { img = offCtx.getImageData(0, 0, bw, bh); }
+  catch (e) { return; }
+  const d = img.data;
+
+  if (mode === 'thermal') {
+    for (let i = 0; i < d.length; i += 4) {
+      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      const c = thermalColor(L);
+      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
+    }
+    offCtx.putImageData(img, 0, 0);
+  } else if (mode === 'negative') {
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
+    }
+    offCtx.putImageData(img, 0, 0);
+  } else if (mode === 'pixel') {
+    // mosaic: average blocks
+    const block = Math.max(4, Math.floor(bw / 12));
+    for (let yy = 0; yy < bh; yy += block) {
+      for (let xx = 0; xx < bw; xx += block) {
+        let r=0,g=0,b=0,n=0;
+        for (let j=0;j<block;j++){
+          for (let k=0;k<block;k++){
+            const px2 = xx+k, py2 = yy+j;
+            if (px2>=bw||py2>=bh) continue;
+            const idx=(py2*bw+px2)*4;
+            r+=d[idx]; g+=d[idx+1]; b+=d[idx+2]; n++;
+          }
+        }
+        r/=n; g/=n; b/=n;
+        for (let j=0;j<block;j++){
+          for (let k=0;k<block;k++){
+            const px2 = xx+k, py2 = yy+j;
+            if (px2>=bw||py2>=bh) continue;
+            const idx=(py2*bw+px2)*4;
+            d[idx]=r; d[idx+1]=g; d[idx+2]=b;
+          }
+        }
+      }
+    }
+    offCtx.putImageData(img, 0, 0);
   }
-  const faceH = faceW * 1.3;
+
+  // draw filtered patch onto overlay, mirrored to match the displayed video,
+  // clipped to a soft ellipse so it reads as a face, not a rectangle
+  const sx0 = (1 - (nx0 + nw)) * w;
+  const sy0 = ny0 * h;
+  const sw = nw * w, sh = nh * h;
 
   ctx.save();
-  ctx.translate(cxp, cyp);
-  ctx.rotate(angle);
-
-  // 1) occluding frosted base so the real face is never visible (privacy)
-  const base = ctx.createRadialGradient(0, 0, faceW*0.05, 0, 0, faceW*0.62);
-  base.addColorStop(0, 'rgba(20,26,34,0.96)');
-  base.addColorStop(0.7, 'rgba(20,26,34,0.85)');
-  base.addColorStop(1, 'rgba(20,26,34,0)');
-  ctx.fillStyle = base;
   ctx.beginPath();
-  ctx.ellipse(0, 0, faceW*0.62, faceH*0.62, 0, 0, 2*Math.PI);
-  ctx.fill();
+  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
+  ctx.clip();
+  // mirror horizontally
+  ctx.translate(sx0 + sw, sy0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(offCanvas, 0, 0, bw, bh, 0, 0, sw, sh);
+  ctx.restore();
 
-  // 2) dissolving pale particles + rightward streaks
-  ctx.shadowColor = 'rgba(180,210,255,0.6)';
-  ctx.shadowBlur = 4;
-  PRIVACY_PARTICLES.forEach(p => {
-    const jitter = Math.sin(t * 1.6 + p.drift) * 0.03;
-    const bx = p.ux * faceW + (Math.sin(t*0.8 + p.drift) * 0.01 * faceW);
-    const by = (p.uy + jitter) * faceH;
-    // streak grows toward +x (disperses to one side) and pulses with time
-    const disperse = (0.4 + 0.6 * (0.5 + 0.5*Math.sin(t*0.9 + p.drift))) * p.streak;
-    const sx = bx + disperse * faceW * 0.55;
-    const alpha = 0.15 + 0.55 * (1 - disperse / (p.streak + 0.001));
-    ctx.strokeStyle = `rgba(225,238,255,${alpha})`;
-    ctx.lineWidth = p.size;
-    ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.lineTo(sx, by);
-    ctx.stroke();
-    ctx.fillStyle = `rgba(240,248,255,${alpha})`;
-    ctx.beginPath();
-    ctx.arc(bx, by, p.size*0.7, 0, 2*Math.PI);
-    ctx.fill();
-  });
-
+  // subtle tech frame around the face box
+  ctx.save();
+  ctx.strokeStyle = mode === 'thermal' ? 'rgba(255,180,120,0.6)'
+                   : mode === 'negative' ? 'rgba(180,255,220,0.5)'
+                   : 'rgba(200,200,220,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -857,7 +933,7 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       drawUserSkeleton(named, w, h);
-      drawPrivacyDissolve(named, w, h, now);
+      drawPrivacyFilter(named, w, h, faceFilterMode);
     }
   } catch (e) {
     // skip frame on transient error
@@ -881,6 +957,7 @@ startBtn.addEventListener('click', async () => {
     setStatus('Live', 'ready');
     running = true;
     layoutToggle.classList.remove('hidden');
+    filterToggle.classList.remove('hidden');
     populateDanceList();
     selectScreen.classList.remove('hidden');
     renderLoop();
