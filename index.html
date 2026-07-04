@@ -132,6 +132,24 @@
   }
   .hidden { display: none !important; }
 
+  #layoutToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 44px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(94,226,255,0.5);
+    background: rgba(94,226,255,0.12);
+    color: #cbf3ff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #layoutToggle:active { background: rgba(94,226,255,0.25); }
+
   .overlayScreen {
     position: absolute;
     inset: 0;
@@ -239,6 +257,8 @@
     <div id="status" class="loading">Loading model…</div>
   </div>
 
+  <button id="layoutToggle" class="hidden">Guide: Beside</button>
+
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
 
@@ -261,7 +281,7 @@
       <div id="danceTimeLabel">0:00 / 0:00</div>
     </div>
     <div id="legend">
-      <span><span class="dot guide"></span>AI Guide</span>
+      <span><span class="dot guide"></span>AI Guide body</span>
       <span><span class="dot you"></span>You</span>
     </div>
   </div>
@@ -287,9 +307,16 @@ const pickAnotherBtn = document.getElementById('pickAnotherBtn');
 const danceProgressWrap = document.getElementById('danceProgressWrap');
 const danceProgressFill = document.getElementById('danceProgressFill');
 const danceTimeLabel = document.getElementById('danceTimeLabel');
+const layoutToggle = document.getElementById('layoutToggle');
 
 let detector = null;
 let running = false;
+let layoutMode = 'beside'; // 'beside' or 'overlay'
+
+layoutToggle.addEventListener('click', () => {
+  layoutMode = layoutMode === 'beside' ? 'overlay' : 'beside';
+  layoutToggle.textContent = layoutMode === 'beside' ? 'Guide: Beside' : 'Guide: Overlay';
+});
 
 // --- Placeholder "reference dances" ---
 // These are simplified, generic movement patterns used ONLY to test the
@@ -450,56 +477,76 @@ async function loadModel() {
   );
 }
 
-// Robotic / wireframe render for the AI guide — angular joints, precise
-// thin lines, cyan palette. Deliberately reads as synthetic/computed,
-// in contrast to the participant's own organic tracked body.
-function drawGuideSkeleton(joints, w, h, t) {
-  const px = (nx) => nx * w;
+// Filled translucent "body presence" render for the AI guide.
+// Draws thick rounded limb strokes + a filled torso + head so it reads
+// as a soft glowing BODY (like a dance partner), not a technical rig.
+// Stays 2D/lightweight so it remains Raspberry-Pi feasible.
+// offsetX shifts the whole figure sideways (used for "beside" layout).
+// scale shrinks it (used to fit a partner beside the user).
+function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
+  const cx = 0.5;
+  const px = (nx) => (offsetX + cx + (nx - cx) * scale) * w;
+  const py = (ny) => (0.5 + (ny - 0.5) * scale) * h;
+
   ctx.save();
-  ctx.lineCap = 'butt';
-  ctx.lineJoin = 'miter';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(94,226,255,0.7)';
+  ctx.shadowBlur = 18;
 
-  const CYAN = 'rgba(94, 226, 255, 0.9)';
-  const CYAN_DIM = 'rgba(94, 226, 255, 0.35)';
+  const bodyFill = 'rgba(94,180,226,0.32)';
+  const bodyEdge = 'rgba(140,220,255,0.55)';
 
-  // thin precise limb lines
+  // filled torso polygon (shoulders -> hips)
+  const ls = joints.left_shoulder, rs = joints.right_shoulder;
+  const lh = joints.left_hip, rh = joints.right_hip;
+  if (ls && rs && lh && rh) {
+    ctx.fillStyle = bodyFill;
+    ctx.beginPath();
+    ctx.moveTo(px(ls.x), py(ls.y));
+    ctx.lineTo(px(rs.x), py(rs.y));
+    ctx.lineTo(px(rh.x), py(rh.y));
+    ctx.lineTo(px(lh.x), py(lh.y));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // thick limb "tubes" give the body volume
+  ctx.strokeStyle = bodyFill;
+  ctx.lineWidth = 26 * scale;
   SKELETON_PAIRS.forEach(([a, b]) => {
     const ja = joints[a], jb = joints[b];
     if (!ja || !jb) return;
-    ctx.strokeStyle = CYAN;
-    ctx.shadowColor = CYAN;
-    ctx.shadowBlur = 6;
-    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(px(ja.x), ja.y * h);
-    ctx.lineTo(px(jb.x), jb.y * h);
+    ctx.moveTo(px(ja.x), py(ja.y));
+    ctx.lineTo(px(jb.x), py(jb.y));
     ctx.stroke();
   });
 
-  // angular joint markers (diamonds) instead of soft dots
-  Object.entries(joints).forEach(([name, j]) => {
-    const x = px(j.x), y = j.y * h;
-    const s = name === 'nose' ? 9 : 5;
-    ctx.fillStyle = CYAN;
-    ctx.shadowBlur = 8;
+  // thinner bright edge line over the tubes for definition
+  ctx.strokeStyle = bodyEdge;
+  ctx.lineWidth = 3;
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
     ctx.beginPath();
-    ctx.moveTo(x, y - s);
-    ctx.lineTo(x + s, y);
-    ctx.lineTo(x, y + s);
-    ctx.lineTo(x - s, y);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(px(ja.x), py(ja.y));
+    ctx.lineTo(px(jb.x), py(jb.y));
+    ctx.stroke();
   });
 
-  // scanning pulse line sweeping down the figure — signals "computed"
-  ctx.shadowBlur = 0;
-  const sweepY = ((t * 0.25) % 1) * h;
-  const grad = ctx.createLinearGradient(0, sweepY - 30, 0, sweepY + 30);
-  grad.addColorStop(0, 'rgba(94,226,255,0)');
-  grad.addColorStop(0.5, 'rgba(94,226,255,0.5)');
-  grad.addColorStop(1, 'rgba(94,226,255,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, sweepY - 30, w, 60);
+  // head as a filled soft circle
+  if (joints.nose) {
+    const hx = px(joints.nose.x), hy = py(joints.nose.y);
+    const r = 26 * scale;
+    const rg = ctx.createRadialGradient(hx, hy, 4, hx, hy, r);
+    rg.addColorStop(0, 'rgba(150,220,255,0.55)');
+    rg.addColorStop(1, 'rgba(94,180,226,0.28)');
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(hx, hy, r, 0, 2 * Math.PI);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -553,7 +600,13 @@ async function renderLoop() {
       finishDance();
     } else {
       const guide = currentDance.poseFn(elapsed);
-      drawGuideSkeleton(guide, w, h, elapsed);
+      if (layoutMode === 'beside') {
+        // shrink and push to the left half, like a partner standing beside you
+        drawGuideSkeleton(guide, w, h, elapsed, -0.26, 0.82);
+      } else {
+        // overlay: centered, full size, you fit inside it
+        drawGuideSkeleton(guide, w, h, elapsed, 0, 1);
+      }
       const pct = Math.min(100, (elapsed / currentDance.duration) * 100);
       danceProgressFill.style.width = pct + '%';
       danceTimeLabel.textContent = `${formatTime(elapsed)} / ${formatTime(currentDance.duration)}`;
@@ -588,6 +641,7 @@ startBtn.addEventListener('click', async () => {
 
     setStatus('Live', 'ready');
     running = true;
+    layoutToggle.classList.remove('hidden');
     populateDanceList();
     selectScreen.classList.remove('hidden');
     renderLoop();
