@@ -319,39 +319,146 @@ layoutToggle.addEventListener('click', () => {
 });
 
 // --- Placeholder "reference dances" ---
-// These are simplified, generic movement patterns used ONLY to test the
-// mirror + overlay + selection mechanic. They are NOT authentic
-// choreography — real keypoint sequences from Harsha's dance dataset
-// will replace these once ready.
+// Each dance is now a SEQUENCE of distinct keyframe poses (6+ moves),
+// interpolated smoothly over time so it reads as real choreography
+// rather than one repeating motion. These remain placeholders — real
+// keypoint sequences from Harsha's dance dataset will replace them.
 const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','right_elbow',
   'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
 
-function makeGuidePoseFn({ period, armAmp, hipAmp, style }) {
-  return function (t) {
-    const phase = (t % period) / period;
-    const wave = Math.sin(phase * Math.PI * 2);
-    const hipWave = Math.sin(phase * Math.PI * 2 + 0.6);
-    const cx = 0.5 + (style === 'sway' ? hipAmp * 0.4 * hipWave : 0);
-    const hipY = 0.62, shY = 0.4;
+// Base body layout constants
+const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
 
-    // staccato style holds briefly at peaks instead of smooth sine
-    const w = style === 'staccato' ? Math.sign(wave) * Math.min(1, Math.abs(wave) * 2.2) : wave;
+// Library of named keyframe poses. Each returns a full joint map.
+// Coordinates are normalized (0-1). cx offset lets a pose lean/shift.
+function basePose(over) {
+  const p = {
+    nose:           { x: CXX,        y: 0.28 },
+    left_shoulder:  { x: CXX-0.09,   y: SHY },
+    right_shoulder: { x: CXX+0.09,   y: SHY },
+    left_elbow:     { x: CXX-0.15,   y: SHY+0.10 },
+    right_elbow:    { x: CXX+0.15,   y: SHY+0.10 },
+    left_wrist:     { x: CXX-0.17,   y: SHY+0.20 },
+    right_wrist:    { x: CXX+0.17,   y: SHY+0.20 },
+    left_hip:       { x: CXX-0.08,   y: HIPY },
+    right_hip:      { x: CXX+0.08,   y: HIPY },
+    left_knee:      { x: CXX-0.09,   y: HIPY+0.16 },
+    right_knee:     { x: CXX+0.09,   y: HIPY+0.16 },
+    left_ankle:     { x: CXX-0.10,   y: HIPY+0.32 },
+    right_ankle:    { x: CXX+0.10,   y: HIPY+0.32 },
+  };
+  if (over) for (const k in over) p[k] = over[k];
+  return p;
+}
 
-    return {
-      nose:           { x: cx + (style === 'sway' ? 0.02*hipWave : 0), y: 0.28 - (style==='sway'?0.01*wave:0) },
-      left_shoulder:  { x: cx-0.09, y: shY + (style==='sway'? 0.01*hipWave : 0) },
-      right_shoulder: { x: cx+0.09, y: shY - (style==='sway'? 0.01*hipWave : 0) },
-      left_elbow:     { x: cx-0.15, y: shY - armAmp*0.55*w },
-      right_elbow:    { x: cx+0.15, y: shY + armAmp*0.55*w },
-      left_wrist:     { x: cx-0.18 + (style==='circular'? 0.05*Math.cos(phase*Math.PI*2):0), y: shY - armAmp*w },
-      right_wrist:    { x: cx+0.18 + (style==='circular'? 0.05*Math.cos(phase*Math.PI*2+Math.PI):0), y: shY + armAmp*w },
-      left_hip:       { x: cx-0.08, y: hipY },
-      right_hip:      { x: cx+0.08, y: hipY },
-      left_knee:      { x: cx-0.09 + hipAmp*0.3*hipWave, y: hipY + 0.16 },
-      right_knee:     { x: cx+0.09 + hipAmp*0.3*hipWave, y: hipY + 0.16 },
-      left_ankle:     { x: cx-0.10, y: hipY + 0.32 },
-      right_ankle:    { x: cx+0.10, y: hipY + 0.32 },
+const POSES = {
+  neutral: () => basePose(),
+
+  armsUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.12, y: SHY-0.22 },
+    right_wrist: { x: CXX+0.12, y: SHY-0.22 },
+  }),
+
+  armsOutT: () => basePose({
+    left_elbow:  { x: CXX-0.17, y: SHY },
+    right_elbow: { x: CXX+0.17, y: SHY },
+    left_wrist:  { x: CXX-0.27, y: SHY },
+    right_wrist: { x: CXX+0.27, y: SHY },
+  }),
+
+  leftUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.11, y: SHY-0.23 },
+    right_elbow: { x: CXX+0.15, y: SHY+0.12 },
+    right_wrist: { x: CXX+0.16, y: SHY+0.24 },
+  }),
+
+  rightUp: () => basePose({
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    right_wrist: { x: CXX+0.11, y: SHY-0.23 },
+    left_elbow:  { x: CXX-0.15, y: SHY+0.12 },
+    left_wrist:  { x: CXX-0.16, y: SHY+0.24 },
+  }),
+
+  handsHips: () => basePose({
+    left_elbow:  { x: CXX-0.18, y: SHY+0.08 },
+    right_elbow: { x: CXX+0.18, y: SHY+0.08 },
+    left_wrist:  { x: CXX-0.09, y: HIPY-0.02 },
+    right_wrist: { x: CXX+0.09, y: HIPY-0.02 },
+  }),
+
+  prayer: () => basePose({
+    left_elbow:  { x: CXX-0.12, y: SHY+0.10 },
+    right_elbow: { x: CXX+0.12, y: SHY+0.10 },
+    left_wrist:  { x: CXX-0.01, y: SHY+0.08 },
+    right_wrist: { x: CXX+0.01, y: SHY+0.08 },
+  }),
+
+  leanLeft: () => basePose({
+    nose:          { x: CXX-0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.13, y: SHY+0.01 },
+    right_shoulder:{ x: CXX+0.05, y: SHY-0.01 },
+    left_elbow:    { x: CXX-0.20, y: SHY+0.02 },
+    left_wrist:    { x: CXX-0.28, y: SHY-0.04 },
+    right_elbow:   { x: CXX+0.10, y: SHY-0.06 },
+    right_wrist:   { x: CXX+0.14, y: SHY-0.18 },
+    left_knee:     { x: CXX-0.12, y: HIPY+0.16 },
+  }),
+
+  leanRight: () => basePose({
+    nose:          { x: CXX+0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.05, y: SHY-0.01 },
+    right_shoulder:{ x: CXX+0.13, y: SHY+0.01 },
+    right_elbow:   { x: CXX+0.20, y: SHY+0.02 },
+    right_wrist:   { x: CXX+0.28, y: SHY-0.04 },
+    left_elbow:    { x: CXX-0.10, y: SHY-0.06 },
+    left_wrist:    { x: CXX-0.14, y: SHY-0.18 },
+    right_knee:    { x: CXX+0.12, y: HIPY+0.16 },
+  }),
+
+  clapCenter: () => basePose({
+    left_elbow:  { x: CXX-0.10, y: SHY+0.04 },
+    right_elbow: { x: CXX+0.10, y: SHY+0.04 },
+    left_wrist:  { x: CXX-0.02, y: SHY+0.02 },
+    right_wrist: { x: CXX+0.02, y: SHY+0.02 },
+  }),
+
+  oneKneeUp: () => basePose({
+    right_knee:  { x: CXX+0.06, y: HIPY+0.06 },
+    right_ankle: { x: CXX+0.08, y: HIPY+0.20 },
+    left_elbow:  { x: CXX-0.15, y: SHY-0.06 },
+    left_wrist:  { x: CXX-0.14, y: SHY-0.20 },
+  }),
+};
+
+// Interpolate between two joint maps
+function lerpPose(a, b, tt) {
+  const out = {};
+  for (const k of GUIDE_JOINTS) {
+    out[k] = {
+      x: a[k].x + (b[k].x - a[k].x) * tt,
+      y: a[k].y + (b[k].y - a[k].y) * tt,
     };
+  }
+  return out;
+}
+
+// Build a pose function from a sequence of pose-name keyframes.
+// The sequence plays through over the dance, looping if time remains.
+function makeSequenceFn(sequence, stepDuration) {
+  const frames = sequence.map(name => POSES[name]());
+  const total = frames.length * stepDuration;
+  return function (t) {
+    const tt = t % total;
+    const idx = Math.floor(tt / stepDuration);
+    const frac = (tt % stepDuration) / stepDuration;
+    // ease in-out for smoother, more dance-like transitions
+    const eased = frac < 0.5 ? 2*frac*frac : 1 - Math.pow(-2*frac+2, 2)/2;
+    const a = frames[idx % frames.length];
+    const b = frames[(idx + 1) % frames.length];
+    return lerpPose(a, b, eased);
   };
 }
 
@@ -359,30 +466,34 @@ const DANCES = [
   {
     id: 'bhangra',
     name: 'Bhangra (placeholder)',
-    sub: 'Punjab · energetic, fast shoulder & arm movement',
+    sub: 'Punjab · energetic arms up, 6 moves',
     duration: 25,
-    poseFn: makeGuidePoseFn({ period: 1.4, armAmp: 0.24, hipAmp: 0.4, style: 'staccato' }),
+    poseFn: makeSequenceFn(
+      ['armsUp','rightUp','armsUp','leftUp','handsHips','oneKneeUp'], 1.1),
   },
   {
     id: 'garba',
     name: 'Garba (placeholder)',
-    sub: 'Gujarat · circular sway, rhythmic steps',
+    sub: 'Gujarat · circular sway & claps, 6 moves',
     duration: 25,
-    poseFn: makeGuidePoseFn({ period: 2.8, armAmp: 0.16, hipAmp: 0.5, style: 'sway' }),
+    poseFn: makeSequenceFn(
+      ['leanLeft','clapCenter','leanRight','clapCenter','armsOutT','handsHips'], 1.5),
   },
   {
     id: 'kathak',
     name: 'Kathak (placeholder)',
-    sub: 'North India · sharp turns, precise holds',
+    sub: 'North India · sharp poses & holds, 7 moves',
     duration: 25,
-    poseFn: makeGuidePoseFn({ period: 2.0, armAmp: 0.20, hipAmp: 0.15, style: 'staccato' }),
+    poseFn: makeSequenceFn(
+      ['prayer','rightUp','armsOutT','leftUp','handsHips','leanRight','prayer'], 1.6),
   },
   {
     id: 'odissi',
     name: 'Odissi (placeholder)',
-    sub: 'Odisha · slow, graceful curves',
+    sub: 'Odisha · slow graceful curves, 6 moves',
     duration: 25,
-    poseFn: makeGuidePoseFn({ period: 4.5, armAmp: 0.14, hipAmp: 0.3, style: 'circular' }),
+    poseFn: makeSequenceFn(
+      ['prayer','leanLeft','armsOutT','leanRight','armsUp','neutral'], 2.4),
   },
 ];
 
@@ -477,12 +588,10 @@ async function loadModel() {
   );
 }
 
-// Filled translucent "body presence" render for the AI guide.
-// Draws thick rounded limb strokes + a filled torso + head so it reads
-// as a soft glowing BODY (like a dance partner), not a technical rig.
-// Stays 2D/lightweight so it remains Raspberry-Pi feasible.
-// offsetX shifts the whole figure sideways (used for "beside" layout).
-// scale shrinks it (used to fit a partner beside the user).
+// Robotic humanoid render for the AI guide — segmented metallic limbs,
+// circular "servo" joints, a chest plate, and a visor head. Reads as a
+// robot dance partner. Still fully 2D so it stays Raspberry-Pi feasible.
+// offsetX shifts the figure sideways; scale shrinks it.
 function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
   const cx = 0.5;
   const px = (nx) => (offsetX + cx + (nx - cx) * scale) * w;
@@ -491,17 +600,21 @@ function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(94,226,255,0.7)';
-  ctx.shadowBlur = 18;
 
-  const bodyFill = 'rgba(94,180,226,0.32)';
-  const bodyEdge = 'rgba(140,220,255,0.55)';
+  const metal = 'rgba(150,170,185,0.9)';
+  const metalDark = 'rgba(70,90,105,0.9)';
+  const glow = 'rgba(94,226,255,0.95)';
 
-  // filled torso polygon (shoulders -> hips)
+  // chest plate (torso as a filled metallic panel)
   const ls = joints.left_shoulder, rs = joints.right_shoulder;
   const lh = joints.left_hip, rh = joints.right_hip;
   if (ls && rs && lh && rh) {
-    ctx.fillStyle = bodyFill;
+    const grad = ctx.createLinearGradient(px(ls.x), py(ls.y), px(rh.x), py(rh.y));
+    grad.addColorStop(0, 'rgba(120,140,155,0.85)');
+    grad.addColorStop(1, 'rgba(60,78,92,0.85)');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = metal;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(px(ls.x), py(ls.y));
     ctx.lineTo(px(rs.x), py(rs.y));
@@ -509,12 +622,35 @@ function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
     ctx.lineTo(px(lh.x), py(lh.y));
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+    // glowing core light on chest
+    const mx = (px(ls.x)+px(rs.x)+px(lh.x)+px(rh.x))/4;
+    const my = (py(ls.y)+py(rs.y)+py(lh.y)+py(rh.y))/4;
+    ctx.shadowColor = glow; ctx.shadowBlur = 14;
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(mx, my, 6*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
-  // thick limb "tubes" give the body volume
-  ctx.strokeStyle = bodyFill;
-  ctx.lineWidth = 26 * scale;
+  // limb segments as tapered metallic tubes
+  ctx.strokeStyle = metalDark;
+  ctx.lineWidth = 16 * scale;
   SKELETON_PAIRS.forEach(([a, b]) => {
+    if (a === 'left_shoulder' && b === 'right_shoulder') return;
+    if (a === 'left_hip' && b === 'right_hip') return;
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), py(ja.y));
+    ctx.lineTo(px(jb.x), py(jb.y));
+    ctx.stroke();
+  });
+  // lighter highlight down each limb
+  ctx.strokeStyle = metal;
+  ctx.lineWidth = 6 * scale;
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    if (a === 'left_shoulder' && b === 'right_shoulder') return;
+    if (a === 'left_hip' && b === 'right_hip') return;
     const ja = joints[a], jb = joints[b];
     if (!ja || !jb) return;
     ctx.beginPath();
@@ -523,32 +659,118 @@ function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
     ctx.stroke();
   });
 
-  // thinner bright edge line over the tubes for definition
-  ctx.strokeStyle = bodyEdge;
-  ctx.lineWidth = 3;
-  SKELETON_PAIRS.forEach(([a, b]) => {
-    const ja = joints[a], jb = joints[b];
-    if (!ja || !jb) return;
-    ctx.beginPath();
-    ctx.moveTo(px(ja.x), py(ja.y));
-    ctx.lineTo(px(jb.x), py(jb.y));
-    ctx.stroke();
+  // servo joints (circles) at every joint
+  const jointNames = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
+    'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+  jointNames.forEach(name => {
+    const j = joints[name];
+    if (!j) return;
+    const x = px(j.x), y = py(j.y);
+    ctx.fillStyle = metal;
+    ctx.beginPath(); ctx.arc(x, y, 7*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.fillStyle = glow;
+    ctx.shadowColor = glow; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(x, y, 3*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
   });
 
-  // head as a filled soft circle
+  // robotic visor head
   if (joints.nose) {
     const hx = px(joints.nose.x), hy = py(joints.nose.y);
-    const r = 26 * scale;
-    const rg = ctx.createRadialGradient(hx, hy, 4, hx, hy, r);
-    rg.addColorStop(0, 'rgba(150,220,255,0.55)');
-    rg.addColorStop(1, 'rgba(94,180,226,0.28)');
-    ctx.fillStyle = rg;
-    ctx.beginPath();
-    ctx.arc(hx, hy, r, 0, 2 * Math.PI);
-    ctx.fill();
+    const r = 24 * scale;
+    // helmet shell
+    ctx.fillStyle = 'rgba(40,48,56,0.95)';
+    ctx.strokeStyle = metal;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(hx, hy, r*0.85, r, 0, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+    // glowing visor band with two eyes
+    ctx.shadowColor = glow; ctx.shadowBlur = 10;
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(hx - r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx + r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
   ctx.restore();
+}
+
+// Draws a glossy robot visor over the participant's real face, tracking
+// position/size/tilt from the pose model's face keypoints (eyes, ears,
+// nose). It's a 2D overlay that follows the head — not a molded 3D mask,
+// but reads clearly as "robot face" for the installation.
+function drawRobotFace(joints, w, h) {
+  const px = (nx) => (1 - nx) * w; // mirrored to match user
+  const py = (ny) => ny * h;
+
+  const le = joints.left_eye, re = joints.right_eye;
+  const nose = joints.nose;
+  if (!nose) return;
+
+  let cxp, cyp, faceW, angle;
+  if (le && re) {
+    const lx = px(le.x), ly = py(le.y);
+    const rx = px(re.x), ry = py(re.y);
+    cxp = (lx + rx) / 2;
+    cyp = (ly + ry) / 2 + faceScaleRef(joints, h) * 0.15;
+    const d = Math.hypot(rx - lx, ry - ly);
+    faceW = d * 2.7;
+    angle = Math.atan2(ry - ly, rx - lx);
+  } else {
+    // fallback: size from ears or a default
+    cxp = px(nose.x); cyp = py(nose.y);
+    faceW = faceScaleRef(joints, h);
+    angle = 0;
+  }
+  const faceH = faceW * 1.35;
+
+  ctx.save();
+  ctx.translate(cxp, cyp);
+  ctx.rotate(angle);
+
+  // glossy black helmet shell with subtle vertical gradient
+  const g = ctx.createLinearGradient(0, -faceH/2, 0, faceH/2);
+  g.addColorStop(0, '#2b2f36');
+  g.addColorStop(0.5, '#0c0e11');
+  g.addColorStop(1, '#04070a');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = 'rgba(220,230,240,0.85)';
+  ctx.lineWidth = Math.max(2, faceW * 0.03);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, faceW/2, faceH/2, 0, 0, 2*Math.PI);
+  ctx.fill();
+  ctx.stroke();
+
+  // highlight sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.beginPath();
+  ctx.ellipse(-faceW*0.15, -faceH*0.12, faceW*0.22, faceH*0.30, -0.3, 0, 2*Math.PI);
+  ctx.fill();
+
+  // two glowing blue eyes
+  const eyeR = faceW * 0.16;
+  const eyeY = -faceH * 0.06;
+  const eyeX = faceW * 0.22;
+  ctx.shadowColor = 'rgba(70,170,255,0.95)';
+  ctx.shadowBlur = faceW * 0.18;
+  [-eyeX, eyeX].forEach(ex => {
+    const rg = ctx.createRadialGradient(ex, eyeY, 1, ex, eyeY, eyeR);
+    rg.addColorStop(0, '#bfe6ff');
+    rg.addColorStop(0.5, '#38a8ff');
+    rg.addColorStop(1, '#0a4a99');
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(ex, eyeY, eyeR, 0, 2*Math.PI);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+// rough face scale from ear distance or eye distance, for fallback sizing
+function faceScaleRef(joints, h) {
+  const le = joints.left_ear, re = joints.right_ear;
+  if (le && re) return Math.hypot((le.x-re.x), (le.y-re.y)) * 900;
+  return h * 0.14;
 }
 
 // Sharper, clearer render for the participant's own tracked body —
@@ -569,7 +791,9 @@ function drawUserSkeleton(joints, w, h) {
     ctx.lineTo(px(jb.x), jb.y * h);
     ctx.stroke();
   });
-  Object.values(joints).forEach(j => {
+  const faceKp = ['nose','left_eye','right_eye','left_ear','right_ear'];
+  Object.entries(joints).forEach(([name, j]) => {
+    if (faceKp.includes(name)) return; // covered by robot face
     ctx.beginPath();
     ctx.arc(px(j.x), j.y * h, 4, 0, 2 * Math.PI);
     ctx.fill();
@@ -619,6 +843,7 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       drawUserSkeleton(named, w, h);
+      drawRobotFace(named, w, h);
     }
   } catch (e) {
     // skip frame on transient error
