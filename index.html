@@ -276,7 +276,7 @@
   </div>
 
   <button id="layoutToggle" class="hidden">Guide: Beside</button>
-  <button id="filterToggle" class="hidden">Face: Thermal</button>
+  <button id="filterToggle" class="hidden">Filter: Thermal</button>
 
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
@@ -334,7 +334,7 @@ let running = false;
 let layoutMode = 'beside'; // 'beside' or 'overlay'
 
 const FILTER_MODES = ['thermal', 'negative', 'pixel'];
-const FILTER_LABELS = { thermal: 'Face: Thermal', negative: 'Face: Negative', pixel: 'Face: Pixelate' };
+const FILTER_LABELS = { thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
 let faceFilterMode = 'thermal';
 
 layoutToggle.addEventListener('click', () => {
@@ -728,6 +728,40 @@ function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
+// FULL-SCREEN filter for thermal / negative: the entire camera view
+// (whole body + background) is remapped, which also hides the face
+// everywhere on screen. Processed at a downscaled resolution for speed,
+// then scaled up — keeps it light enough for the Raspberry Pi.
+const FILTER_DS = 256; // downscale width for full-screen processing
+function drawFullScreenFilter(w, h, mode) {
+  const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+  if (!vw || !vh) return;
+  const sw = FILTER_DS, sh = Math.max(2, Math.round(FILTER_DS * vh / vw));
+  offCanvas.width = sw; offCanvas.height = sh;
+  offCtx.drawImage(video, 0, 0, sw, sh);
+  let img;
+  try { img = offCtx.getImageData(0, 0, sw, sh); }
+  catch (e) { return; }
+  const d = img.data;
+  if (mode === 'thermal') {
+    for (let i = 0; i < d.length; i += 4) {
+      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      const c = thermalColor(L);
+      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
+    }
+  } else { // negative
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.translate(w, 0); ctx.scale(-1, 1); // mirror to match user
+  ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h);
+  ctx.restore();
+}
+
 // Thermal color ramp: map brightness (0-255) to a cold->hot color.
 function thermalColor(L) {
   const t = L / 255;
@@ -908,6 +942,11 @@ async function renderLoop() {
 
   const now = performance.now() / 1000;
 
+  // Background layer: full-screen thermal/negative (also hides face everywhere)
+  if (faceFilterMode === 'thermal' || faceFilterMode === 'negative') {
+    drawFullScreenFilter(w, h, faceFilterMode);
+  }
+
   if (currentDance && !danceFinished) {
     const elapsed = now - danceStartTime;
     if (elapsed >= currentDance.duration) {
@@ -933,7 +972,8 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       drawUserSkeleton(named, w, h);
-      drawPrivacyFilter(named, w, h, faceFilterMode);
+      // face-only blur applies only in pixel mode (thermal/negative are full-screen)
+      if (faceFilterMode === 'pixel') drawPrivacyFilter(named, w, h, 'pixel');
     }
   } catch (e) {
     // skip frame on transient error
@@ -958,6 +998,7 @@ startBtn.addEventListener('click', async () => {
     running = true;
     layoutToggle.classList.remove('hidden');
     filterToggle.classList.remove('hidden');
+    filterToggle.textContent = FILTER_LABELS[faceFilterMode];
     populateDanceList();
     selectScreen.classList.remove('hidden');
     renderLoop();
