@@ -1012,9 +1012,17 @@ function currentTargetPose(t) {
 }
 
 // Generic smooth figure drawer (limbs from SKELETON_PAIRS + head, hands, feet)
+// spreadY expands the figure vertically around its center so it fills more
+// of a tall phone screen; sc scales width around center x=0.5.
 function drawFigure(joints, w, h, opts) {
-  const px = (nx) => (opts.mirror ? (1-nx) : nx) * w;
-  const py = (ny) => ny * h;
+  const sc = opts.sc || 1;
+  const spreadY = opts.spreadY || 1;
+  const cyRef = 0.5; // vertical anchor
+  const px = (nx) => {
+    const x = 0.5 + (nx - 0.5) * sc;
+    return (opts.mirror ? (1 - x) : x) * w;
+  };
+  const py = (ny) => (cyRef + (ny - cyRef) * spreadY) * h;
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -1054,10 +1062,10 @@ function drawFigure(joints, w, h, opts) {
   ctx.restore();
 }
 
-// crimson target (bold), centered — the pose to match
+// crimson target (bold), centered and enlarged — the pose to match
 function drawTargetLine(w, h, t) {
   const pose = currentTargetPose(t);
-  drawFigure(pose, w, h, { mirror:false, outline:16, casing:11, core:6.5, color:'rgba(226,34,54,0.97)', headR:22 });
+  drawFigure(pose, w, h, { mirror:false, outline:18, casing:12, core:7, color:'rgba(226,34,54,0.97)', headR:26, sc:1.35, spreadY:1.5 });
 }
 
 // your own body as a smooth green figure, mirrored
