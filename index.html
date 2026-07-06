@@ -36,6 +36,7 @@
   }
   video {
     transform: scaleX(-1);
+    visibility: hidden;
   }
   #ui {
     position: absolute;
@@ -1011,21 +1012,20 @@ function currentTargetPose(t) {
   return tgtCur;
 }
 
-// Generic smooth figure drawer (limbs from SKELETON_PAIRS + head, hands, feet)
-// spreadY expands the figure vertically around its center so it fills more
-// of a tall phone screen; sc scales width around center x=0.5.
-function drawFigure(joints, w, h, opts) {
-  const sc = opts.sc || 1;
-  const spreadY = opts.spreadY || 1;
-  const cyRef = 0.5; // vertical anchor
+// Draw a figure into a given rect {x,y,w,h}. sc scales width around center,
+// spreadY expands vertically, mirror flips horizontally.
+function drawFigureRect(joints, rect, opts) {
+  const sc = opts.sc || 1, spreadY = opts.spreadY || 1;
   const px = (nx) => {
-    const x = 0.5 + (nx - 0.5) * sc;
-    return (opts.mirror ? (1 - x) : x) * w;
+    let x = 0.5 + (nx - 0.5) * sc;
+    x = opts.mirror ? (1 - x) : x;
+    return rect.x + x * rect.w;
   };
-  const py = (ny) => (cyRef + (ny - cyRef) * spreadY) * h;
+  const py = (ny) => rect.y + (0.5 + (ny - 0.5) * spreadY) * rect.h;
+
   ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
   const strokePairs = (width, color) => {
     ctx.strokeStyle = color; ctx.lineWidth = width;
@@ -1038,12 +1038,10 @@ function drawFigure(joints, w, h, opts) {
       ctx.stroke();
     });
   };
-
   if (opts.outline) strokePairs(opts.outline, 'rgba(0,0,0,0.42)');
   if (opts.casing)  strokePairs(opts.casing,  'rgba(255,255,255,0.9)');
   strokePairs(opts.core, opts.color);
 
-  // head
   if (joints.nose) {
     const hx = px(joints.nose.x), hy = py(joints.nose.y), r = opts.headR || 18;
     if (opts.outline) {
@@ -1053,7 +1051,6 @@ function drawFigure(joints, w, h, opts) {
     ctx.lineWidth = opts.core; ctx.strokeStyle = opts.color;
     ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2); ctx.stroke();
   }
-  // hands + feet
   ctx.fillStyle = opts.color;
   ['left_wrist','right_wrist','left_ankle','right_ankle'].forEach(k => {
     const j = joints[k]; if (!j) return;
@@ -1062,15 +1059,70 @@ function drawFigure(joints, w, h, opts) {
   ctx.restore();
 }
 
-// crimson target (bold), centered and enlarged — the pose to match
-function drawTargetLine(w, h, t) {
-  const pose = currentTargetPose(t);
-  drawFigure(pose, w, h, { mirror:false, outline:18, casing:12, core:7, color:'rgba(226,34,54,0.97)', headR:26, sc:1.35, spreadY:1.5 });
+// Draw the (optionally filtered) camera video into a rect, mirrored.
+function drawCameraToRect(rect, mode) {
+  const vw = video.videoWidth||0, vh = video.videoHeight||0;
+  if (!vw || !vh) return;
+  if (mode === 'thermal' || mode === 'negative') {
+    const sw = 200, sh = Math.max(2, Math.round(200*vh/vw));
+    offCanvas.width = sw; offCanvas.height = sh;
+    offCtx.drawImage(video, 0, 0, sw, sh);
+    let img; try { img = offCtx.getImageData(0,0,sw,sh); } catch(e){ return; }
+    const d = img.data;
+    if (mode === 'thermal') {
+      for (let i=0;i<d.length;i+=4){ const L=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; const c=thermalColor(L); d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; }
+    } else {
+      for (let i=0;i<d.length;i+=4){ d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; }
+    }
+    offCtx.putImageData(img,0,0);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
+    ctx.drawImage(offCanvas, 0,0,sw,sh, 0,0, rect.w, rect.h);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
+    ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
+    ctx.drawImage(video, 0,0, rect.w, rect.h);
+    ctx.restore();
+  }
 }
 
-// your own body as a smooth green figure, mirrored
-function drawUserFigure(joints, w, h) {
-  drawFigure(joints, w, h, { mirror:true, outline:8, core:5, color:'rgba(70,235,130,0.95)', headR:16 });
+// Face-only mosaic blur inside a rect (pixel mode).
+function drawFaceBlurRect(joints, rect) {
+  const vw = video.videoWidth||0, vh = video.videoHeight||0;
+  if (!vw || !vh) return;
+  const nose = joints.nose; if (!nose) return;
+  const le = joints.left_eye, re = joints.right_eye, lear=joints.left_ear, rear=joints.right_ear;
+  let halfW;
+  if (le && re) halfW = Math.hypot(le.x-re.x, le.y-re.y)*1.7;
+  else if (lear && rear) halfW = Math.hypot(lear.x-rear.x, lear.y-rear.y)*0.95;
+  else halfW = 0.12;
+  halfW = Math.max(0.06, Math.min(0.28, halfW));
+  let nx0=nose.x-halfW, ny0=nose.y-halfW*1.15, nw=halfW*2, nh=halfW*2.35;
+  nx0=Math.max(0,nx0); ny0=Math.max(0,ny0); nw=Math.min(1-nx0,nw); nh=Math.min(1-ny0,nh);
+  const bx=(nx0*vw)|0, by=(ny0*vh)|0, bw=Math.max(2,(nw*vw)|0), bh=Math.max(2,(nh*vh)|0);
+  offCanvas.width=bw; offCanvas.height=bh;
+  offCtx.drawImage(video, bx,by,bw,bh, 0,0,bw,bh);
+  let img; try{img=offCtx.getImageData(0,0,bw,bh);}catch(e){return;}
+  const d=img.data, block=Math.max(4,(bw/12)|0);
+  for(let yy=0;yy<bh;yy+=block)for(let xx=0;xx<bw;xx+=block){
+    let r=0,g=0,b=0,n=0;
+    for(let j=0;j<block;j++)for(let k=0;k<block;k++){const p2=xx+k,q2=yy+j;if(p2>=bw||q2>=bh)continue;const idx=(q2*bw+p2)*4;r+=d[idx];g+=d[idx+1];b+=d[idx+2];n++;}
+    r/=n;g/=n;b/=n;
+    for(let j=0;j<block;j++)for(let k=0;k<block;k++){const p2=xx+k,q2=yy+j;if(p2>=bw||q2>=bh)continue;const idx=(q2*bw+p2)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;}
+  }
+  offCtx.putImageData(img,0,0);
+  // map normalized box into rect (mirrored)
+  const sx0 = rect.x + (1-(nx0+nw))*rect.w, sy0 = rect.y + ny0*rect.h;
+  const sw = nw*rect.w, sh = nh*rect.h;
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(sx0+sw/2, sy0+sh/2, sw/2, sh/2, 0, 0, 2*Math.PI); ctx.clip();
+  ctx.translate(sx0+sw, sy0); ctx.scale(-1,1);
+  ctx.drawImage(offCanvas, 0,0,bw,bh, 0,0, sw, sh);
+  ctx.restore();
 }
 
 // Sharper, clearer render for the participant's own tracked body —
@@ -1115,28 +1167,53 @@ async function renderLoop() {
   if (!running) return;
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
-
   const now = performance.now() / 1000;
 
-  // Background layer: full-screen thermal/negative (also hides face everywhere)
-  if (faceFilterMode === 'thermal' || faceFilterMode === 'negative') {
-    drawFullScreenFilter(w, h, faceFilterMode);
+  // Split into two panels: landscape -> left/right, portrait -> top/bottom.
+  const landscape = w >= h;
+  let targetRect, camRect;
+  if (landscape) {
+    targetRect = { x: 0, y: 0, w: w/2, h };
+    camRect    = { x: w/2, y: 0, w: w/2, h };
+  } else {
+    targetRect = { x: 0, y: 0, w, h: h/2 };
+    camRect    = { x: 0, y: h/2, w, h: h/2 };
   }
 
-  // single crimson target figure for the participant to match
-  drawTargetLine(w, h, now);
+  // --- Target panel: clean background + crimson pose figure to copy ---
+  ctx.save();
+  ctx.fillStyle = '#12140f';
+  ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
+  ctx.restore();
+  const pose = currentTargetPose(now);
+  drawFigureRect(pose, targetRect, { mirror:false, outline:16, casing:11, core:7, color:'rgba(226,34,54,0.97)', headR:22, sc:1.1, spreadY:1.25 });
 
-  // your own body as a smooth green figure (and face blur in pixel mode)
+  // --- Camera panel: (filtered) video + your green figure ---
+  drawCameraToRect(camRect, faceFilterMode);
   try {
     const poses = await detector.estimatePoses(video, { flipHorizontal: false });
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
-      drawUserFigure(named, w, h);
-      if (faceFilterMode === 'pixel') drawPrivacyFilter(named, w, h, 'pixel');
+      if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
+      drawFigureRect(named, camRect, { mirror:true, outline:7, core:5, color:'rgba(70,235,130,0.95)', headR:15, sc:1, spreadY:1 });
     }
   } catch (e) {
     // skip frame on transient error
   }
+
+  // --- Divider + labels ---
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (landscape) { ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h); }
+  else { ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); }
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = '600 12px -apple-system, sans-serif';
+  ctx.fillText('COPY THIS', targetRect.x + 12, targetRect.y + 22);
+  ctx.fillText('YOU', camRect.x + 12, camRect.y + 22);
+  ctx.restore();
 
   requestAnimationFrame(renderLoop);
 }
