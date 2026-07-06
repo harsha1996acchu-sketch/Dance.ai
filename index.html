@@ -996,13 +996,20 @@ function drawBodyLines(joints, w, h, t) {
 // Laban / Kandinsky style) that the participant matches with their body.
 // Holds ~1s then quickly morphs to the next shape. Each shape is a list of
 // points; some segments render as smooth curves, giving the mixed feel.
+// Each preset is ONE continuous line that traces a readable dance pose,
+// flowing head -> arm/hand -> body -> leg, so the participant can see it
+// as a pose to copy (like the reference gesture-line drawings).
 const GESTURE_PRESETS = [
-  [[0.50,0.14],[0.60,0.30],[0.42,0.46],[0.60,0.60],[0.44,0.76],[0.52,0.90]], // S-curve
-  [[0.36,0.20],[0.60,0.22],[0.66,0.44],[0.54,0.60],[0.40,0.74],[0.58,0.90]], // curve + kick
-  [[0.34,0.18],[0.52,0.30],[0.44,0.48],[0.66,0.56],[0.48,0.72],[0.40,0.90]], // zigzag gesture
-  [[0.44,0.14],[0.56,0.26],[0.60,0.44],[0.46,0.56],[0.52,0.74],[0.66,0.88]], // reach + swing
-  [[0.30,0.46],[0.46,0.30],[0.56,0.24],[0.64,0.38],[0.54,0.60],[0.70,0.80]], // leap arc
-  [[0.62,0.16],[0.44,0.28],[0.56,0.46],[0.40,0.58],[0.58,0.74],[0.44,0.90]], // counter-zigzag
+  // reach-up: head, arm up, down through body, legs apart
+  [[0.50,0.12],[0.60,0.22],[0.66,0.36],[0.52,0.40],[0.50,0.60],[0.40,0.86]],
+  // side bend: head tilts, arm sweeps, body curves, leg out
+  [[0.44,0.14],[0.34,0.24],[0.46,0.38],[0.56,0.52],[0.50,0.68],[0.62,0.88]],
+  // lunge: head, arm forward, long diagonal body to back leg
+  [[0.42,0.16],[0.56,0.26],[0.50,0.42],[0.44,0.56],[0.60,0.70],[0.70,0.88]],
+  // arch back: head back, body curves, legs under
+  [[0.52,0.16],[0.44,0.28],[0.54,0.42],[0.48,0.58],[0.52,0.74],[0.50,0.90]],
+  // leap: head, one arm up, body diagonal, legs split
+  [[0.40,0.14],[0.54,0.22],[0.48,0.40],[0.58,0.54],[0.38,0.72],[0.64,0.86]],
 ];
 const clamp01 = (v) => Math.max(0.05, Math.min(0.95, v));
 function randomGesture() {
