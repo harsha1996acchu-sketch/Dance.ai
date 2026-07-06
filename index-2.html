@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dance Mirror — Proof of Concept</title>
+<style>
+  :root {
+    --ink: #0d0f0c;
+    --paper: #f2efe6;
+    --line: #2f6f4f;
+    --guide: #5ee2ff;
+    --muted: #7a8577;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    height: 100%;
+    overflow: hidden;
+  }
+  #stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+  }
+  video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  video {
+    transform: scaleX(-1);
+  }
+  #ui {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: env(safe-area-inset-top, 16px) 16px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
+    z-index: 10;
+    pointer-events: none;
+  }
+  #title {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  #status {
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.15);
+    max-width: 55vw;
+    text-align: right;
+    word-break: break-word;
+  }
+  #status.ready { color: #9be3a8; border-color: rgba(155,227,168,0.4); }
+  #status.loading { color: #e3c99b; }
+  #status.error { color: #e39b9b; }
+
+  #bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 16px env(safe-area-inset-bottom, 16px);
+    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #legend {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+  }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .dot.you { background: #46eb82; }
+  .dot.guide { background: var(--guide); }
+
+  #startBtn {
+    -webkit-appearance: none;
+    border: none;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 14px;
+    border-radius: 10px;
+    letter-spacing: 0.01em;
+  }
+  #startBtn:active { opacity: 0.8; }
+
+  #startScreen {
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 32px;
+    text-align: center;
+  }
+  #startScreen h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  #startScreen p {
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 320px;
+    line-height: 1.5;
+    margin: 0 0 28px;
+  }
+  .hidden { display: none !important; }
+
+  #layoutToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 44px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(94,226,255,0.5);
+    background: rgba(94,226,255,0.12);
+    color: #cbf3ff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #layoutToggle:active { background: rgba(94,226,255,0.25); }
+
+  #filterToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 82px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(255,180,120,0.5);
+    background: rgba(255,180,120,0.14);
+    color: #ffd9b0;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #filterToggle:active { background: rgba(255,180,120,0.28); }
+
+  .overlayScreen {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(13,15,12,0.88);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 32px;
+    text-align: center;
+  }
+  .overlayScreen h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .overlayScreen p {
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 300px;
+    line-height: 1.5;
+    margin: 0 0 24px;
+  }
+
+  #danceList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .danceOption {
+    -webkit-appearance: none;
+    border: 1px solid rgba(94,226,255,0.35);
+    background: rgba(94,226,255,0.08);
+    color: var(--paper);
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .danceOption:active { background: rgba(94,226,255,0.18); }
+  .danceOption .sub {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  #replayBtn, #pickAnotherBtn {
+    -webkit-appearance: none;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 13px 20px;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 8px;
+  }
+  #pickAnotherBtn { background: var(--paper); color: var(--ink); }
+  #replayBtn.ghostBtn {
+    background: transparent;
+    border: 1px solid rgba(242,239,230,0.3);
+    color: var(--paper);
+  }
+
+  #danceProgressWrap {
+    margin-bottom: 2px;
+  }
+  #danceProgressBar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    overflow: hidden;
+    margin-bottom: 5px;
+  }
+  #danceProgressFill {
+    height: 100%;
+    width: 0%;
+    background: var(--guide);
+  }
+  #danceTimeLabel {
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>Dance Mirror</h1>
+  <p>Privacy mode: your face is never shown or recorded. As you move, your body generates a field of green motion lines. Everything runs offline on your phone — nothing is stored or sent.</p>
+  <button id="startBtn">Start camera</button>
+</div>
+
+<div id="stage" class="hidden">
+  <div id="ui">
+    <div id="title">Dance Mirror — Test</div>
+    <div id="status" class="loading">Loading model…</div>
+  </div>
+
+  <button id="layoutToggle" class="hidden">Guide: Beside</button>
+  <button id="filterToggle" class="hidden">Filter: Thermal</button>
+
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div id="selectScreen" class="overlayScreen hidden">
+    <h1>Choose a dance</h1>
+    <p>Each guide runs for about 25 seconds. Follow the cyan figure.</p>
+    <div id="danceList"></div>
+  </div>
+
+  <div id="doneScreen" class="overlayScreen hidden">
+    <h1>Dance complete</h1>
+    <p id="doneDanceName"></p>
+    <button id="replayBtn" class="ghostBtn">Replay this dance</button>
+    <button id="pickAnotherBtn">Choose another dance</button>
+  </div>
+
+  <div id="bottom">
+    <div id="danceProgressWrap" class="hidden">
+      <div id="danceProgressBar"><div id="danceProgressFill"></div></div>
+      <div id="danceTimeLabel">0:00 / 0:00</div>
+    </div>
+    <div id="legend">
+      <span><span class="dot you"></span>Your motion lines</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const stage = document.getElementById('stage');
+const video = document.getElementById('video');
+const canvas = document.getElementById('overlay');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const selectScreen = document.getElementById('selectScreen');
+const danceListEl = document.getElementById('danceList');
+const doneScreen = document.getElementById('doneScreen');
+const doneDanceNameEl = document.getElementById('doneDanceName');
+const replayBtn = document.getElementById('replayBtn');
+const pickAnotherBtn = document.getElementById('pickAnotherBtn');
+const danceProgressWrap = document.getElementById('danceProgressWrap');
+const danceProgressFill = document.getElementById('danceProgressFill');
+const danceTimeLabel = document.getElementById('danceTimeLabel');
+const layoutToggle = document.getElementById('layoutToggle');
+const filterToggle = document.getElementById('filterToggle');
+
+let detector = null;
+let running = false;
+let layoutMode = 'beside'; // 'beside' or 'overlay'
+
+const FILTER_MODES = ['thermal', 'negative', 'pixel'];
+const FILTER_LABELS = { thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
+let faceFilterMode = 'thermal';
+
+layoutToggle.addEventListener('click', () => {
+  layoutMode = layoutMode === 'beside' ? 'overlay' : 'beside';
+  layoutToggle.textContent = layoutMode === 'beside' ? 'Guide: Beside' : 'Guide: Overlay';
+});
+
+filterToggle.addEventListener('click', () => {
+  const i = FILTER_MODES.indexOf(faceFilterMode);
+  faceFilterMode = FILTER_MODES[(i + 1) % FILTER_MODES.length];
+  filterToggle.textContent = FILTER_LABELS[faceFilterMode];
+});
+
+// --- Placeholder "reference dances" ---
+// Each dance is now a SEQUENCE of distinct keyframe poses (6+ moves),
+// interpolated smoothly over time so it reads as real choreography
+// rather than one repeating motion. These remain placeholders — real
+// keypoint sequences from Harsha's dance dataset will replace them.
+const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','right_elbow',
+  'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+
+// Base body layout constants
+const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
+
+// Library of named keyframe poses. Each returns a full joint map.
+// Coordinates are normalized (0-1). cx offset lets a pose lean/shift.
+function basePose(over) {
+  const p = {
+    nose:           { x: CXX,        y: 0.28 },
+    left_shoulder:  { x: CXX-0.09,   y: SHY },
+    right_shoulder: { x: CXX+0.09,   y: SHY },
+    left_elbow:     { x: CXX-0.15,   y: SHY+0.10 },
+    right_elbow:    { x: CXX+0.15,   y: SHY+0.10 },
+    left_wrist:     { x: CXX-0.17,   y: SHY+0.20 },
+    right_wrist:    { x: CXX+0.17,   y: SHY+0.20 },
+    left_hip:       { x: CXX-0.08,   y: HIPY },
+    right_hip:      { x: CXX+0.08,   y: HIPY },
+    left_knee:      { x: CXX-0.09,   y: HIPY+0.16 },
+    right_knee:     { x: CXX+0.09,   y: HIPY+0.16 },
+    left_ankle:     { x: CXX-0.10,   y: HIPY+0.32 },
+    right_ankle:    { x: CXX+0.10,   y: HIPY+0.32 },
+  };
+  if (over) for (const k in over) p[k] = over[k];
+  return p;
+}
+
+const POSES = {
+  neutral: () => basePose(),
+
+  armsUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.12, y: SHY-0.22 },
+    right_wrist: { x: CXX+0.12, y: SHY-0.22 },
+  }),
+
+  armsOutT: () => basePose({
+    left_elbow:  { x: CXX-0.17, y: SHY },
+    right_elbow: { x: CXX+0.17, y: SHY },
+    left_wrist:  { x: CXX-0.27, y: SHY },
+    right_wrist: { x: CXX+0.27, y: SHY },
+  }),
+
+  leftUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.11, y: SHY-0.23 },
+    right_elbow: { x: CXX+0.15, y: SHY+0.12 },
+    right_wrist: { x: CXX+0.16, y: SHY+0.24 },
+  }),
+
+  rightUp: () => basePose({
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    right_wrist: { x: CXX+0.11, y: SHY-0.23 },
+    left_elbow:  { x: CXX-0.15, y: SHY+0.12 },
+    left_wrist:  { x: CXX-0.16, y: SHY+0.24 },
+  }),
+
+  handsHips: () => basePose({
+    left_elbow:  { x: CXX-0.18, y: SHY+0.08 },
+    right_elbow: { x: CXX+0.18, y: SHY+0.08 },
+    left_wrist:  { x: CXX-0.09, y: HIPY-0.02 },
+    right_wrist: { x: CXX+0.09, y: HIPY-0.02 },
+  }),
+
+  prayer: () => basePose({
+    left_elbow:  { x: CXX-0.12, y: SHY+0.10 },
+    right_elbow: { x: CXX+0.12, y: SHY+0.10 },
+    left_wrist:  { x: CXX-0.01, y: SHY+0.08 },
+    right_wrist: { x: CXX+0.01, y: SHY+0.08 },
+  }),
+
+  leanLeft: () => basePose({
+    nose:          { x: CXX-0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.13, y: SHY+0.01 },
+    right_shoulder:{ x: CXX+0.05, y: SHY-0.01 },
+    left_elbow:    { x: CXX-0.20, y: SHY+0.02 },
+    left_wrist:    { x: CXX-0.28, y: SHY-0.04 },
+    right_elbow:   { x: CXX+0.10, y: SHY-0.06 },
+    right_wrist:   { x: CXX+0.14, y: SHY-0.18 },
+    left_knee:     { x: CXX-0.12, y: HIPY+0.16 },
+  }),
+
+  leanRight: () => basePose({
+    nose:          { x: CXX+0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.05, y: SHY-0.01 },
+    right_shoulder:{ x: CXX+0.13, y: SHY+0.01 },
+    right_elbow:   { x: CXX+0.20, y: SHY+0.02 },
+    right_wrist:   { x: CXX+0.28, y: SHY-0.04 },
+    left_elbow:    { x: CXX-0.10, y: SHY-0.06 },
+    left_wrist:    { x: CXX-0.14, y: SHY-0.18 },
+    right_knee:    { x: CXX+0.12, y: HIPY+0.16 },
+  }),
+
+  clapCenter: () => basePose({
+    left_elbow:  { x: CXX-0.10, y: SHY+0.04 },
+    right_elbow: { x: CXX+0.10, y: SHY+0.04 },
+    left_wrist:  { x: CXX-0.02, y: SHY+0.02 },
+    right_wrist: { x: CXX+0.02, y: SHY+0.02 },
+  }),
+
+  oneKneeUp: () => basePose({
+    right_knee:  { x: CXX+0.06, y: HIPY+0.06 },
+    right_ankle: { x: CXX+0.08, y: HIPY+0.20 },
+    left_elbow:  { x: CXX-0.15, y: SHY-0.06 },
+    left_wrist:  { x: CXX-0.14, y: SHY-0.20 },
+  }),
+};
+
+// Interpolate between two joint maps
+function lerpPose(a, b, tt) {
+  const out = {};
+  for (const k of GUIDE_JOINTS) {
+    out[k] = {
+      x: a[k].x + (b[k].x - a[k].x) * tt,
+      y: a[k].y + (b[k].y - a[k].y) * tt,
+    };
+  }
+  return out;
+}
+
+// Build a pose function from a sequence of pose-name keyframes.
+// The sequence plays through over the dance, looping if time remains.
+function makeSequenceFn(sequence, stepDuration) {
+  const frames = sequence.map(name => POSES[name]());
+  const total = frames.length * stepDuration;
+  return function (t) {
+    const tt = t % total;
+    const idx = Math.floor(tt / stepDuration);
+    const frac = (tt % stepDuration) / stepDuration;
+    // ease in-out for smoother, more dance-like transitions
+    const eased = frac < 0.5 ? 2*frac*frac : 1 - Math.pow(-2*frac+2, 2)/2;
+    const a = frames[idx % frames.length];
+    const b = frames[(idx + 1) % frames.length];
+    return lerpPose(a, b, eased);
+  };
+}
+
+const DANCES = [
+  {
+    id: 'bhangra',
+    name: 'Bhangra (placeholder)',
+    sub: 'Punjab · energetic arms up, 6 moves',
+    duration: 25,
+    poseFn: makeSequenceFn(
+      ['armsUp','rightUp','armsUp','leftUp','handsHips','oneKneeUp'], 1.1),
+  },
+  {
+    id: 'garba',
+    name: 'Garba (placeholder)',
+    sub: 'Gujarat · circular sway & claps, 6 moves',
+    duration: 25,
+    poseFn: makeSequenceFn(
+      ['leanLeft','clapCenter','leanRight','clapCenter','armsOutT','handsHips'], 1.5),
+  },
+  {
+    id: 'kathak',
+    name: 'Kathak (placeholder)',
+    sub: 'North India · sharp poses & holds, 7 moves',
+    duration: 25,
+    poseFn: makeSequenceFn(
+      ['prayer','rightUp','armsOutT','leftUp','handsHips','leanRight','prayer'], 1.6),
+  },
+  {
+    id: 'odissi',
+    name: 'Odissi (placeholder)',
+    sub: 'Odisha · slow graceful curves, 6 moves',
+    duration: 25,
+    poseFn: makeSequenceFn(
+      ['prayer','leanLeft','armsOutT','leanRight','armsUp','neutral'], 2.4),
+  },
+];
+
+let currentDance = null;
+let danceStartTime = null;
+let danceFinished = false;
+
+const SKELETON_PAIRS = [
+  ['left_shoulder','right_shoulder'],
+  ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+  ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
+  ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+  ['left_hip','right_hip'],
+  ['left_hip','left_knee'],['left_knee','left_ankle'],
+  ['right_hip','right_knee'],['right_knee','right_ankle'],
+];
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function populateDanceList() {
+  danceListEl.innerHTML = '';
+  DANCES.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'danceOption';
+    btn.innerHTML = `${d.name}<span class="sub">${d.sub} · ${formatTime(d.duration)}</span>`;
+    btn.addEventListener('click', () => startDance(d));
+    danceListEl.appendChild(btn);
+  });
+}
+
+function startDance(dance) {
+  currentDance = dance;
+  danceStartTime = performance.now() / 1000;
+  danceFinished = false;
+  selectScreen.classList.add('hidden');
+  doneScreen.classList.add('hidden');
+  danceProgressWrap.classList.remove('hidden');
+}
+
+function finishDance() {
+  danceFinished = true;
+  danceProgressWrap.classList.add('hidden');
+  doneDanceNameEl.textContent = currentDance.name + ' finished';
+  doneScreen.classList.remove('hidden');
+}
+
+replayBtn.addEventListener('click', () => startDance(currentDance));
+pickAnotherBtn.addEventListener('click', () => {
+  doneScreen.classList.add('hidden');
+  selectScreen.classList.remove('hidden');
+});
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+async function setupCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false
+  });
+  video.srcObject = stream;
+  return new Promise((resolve, reject) => {
+    video.onloadedmetadata = async () => {
+      try {
+        await video.play();
+        resolve(video);
+      } catch (e) {
+        reject(e);
+      }
+    };
+  });
+}
+
+async function loadModel() {
+  await tf.setBackend('webgl');
+  await tf.ready();
+  detector = await poseDetection.createDetector(
+    poseDetection.SupportedModels.MoveNet,
+    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+  );
+}
+
+// Robotic humanoid render for the AI guide — segmented metallic limbs,
+// circular "servo" joints, a chest plate, and a visor head. Reads as a
+// robot dance partner. Still fully 2D so it stays Raspberry-Pi feasible.
+// offsetX shifts the figure sideways; scale shrinks it.
+function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
+  const cx = 0.5;
+  const px = (nx) => (offsetX + cx + (nx - cx) * scale) * w;
+  const py = (ny) => (0.5 + (ny - 0.5) * scale) * h;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const metal = 'rgba(150,170,185,0.9)';
+  const metalDark = 'rgba(70,90,105,0.9)';
+  const glow = 'rgba(94,226,255,0.95)';
+
+  // chest plate (torso as a filled metallic panel)
+  const ls = joints.left_shoulder, rs = joints.right_shoulder;
+  const lh = joints.left_hip, rh = joints.right_hip;
+  if (ls && rs && lh && rh) {
+    const grad = ctx.createLinearGradient(px(ls.x), py(ls.y), px(rh.x), py(rh.y));
+    grad.addColorStop(0, 'rgba(120,140,155,0.85)');
+    grad.addColorStop(1, 'rgba(60,78,92,0.85)');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = metal;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px(ls.x), py(ls.y));
+    ctx.lineTo(px(rs.x), py(rs.y));
+    ctx.lineTo(px(rh.x), py(rh.y));
+    ctx.lineTo(px(lh.x), py(lh.y));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // glowing core light on chest
+    const mx = (px(ls.x)+px(rs.x)+px(lh.x)+px(rh.x))/4;
+    const my = (py(ls.y)+py(rs.y)+py(lh.y)+py(rh.y))/4;
+    ctx.shadowColor = glow; ctx.shadowBlur = 14;
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(mx, my, 6*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // limb segments as tapered metallic tubes
+  ctx.strokeStyle = metalDark;
+  ctx.lineWidth = 16 * scale;
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    if (a === 'left_shoulder' && b === 'right_shoulder') return;
+    if (a === 'left_hip' && b === 'right_hip') return;
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), py(ja.y));
+    ctx.lineTo(px(jb.x), py(jb.y));
+    ctx.stroke();
+  });
+  // lighter highlight down each limb
+  ctx.strokeStyle = metal;
+  ctx.lineWidth = 6 * scale;
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    if (a === 'left_shoulder' && b === 'right_shoulder') return;
+    if (a === 'left_hip' && b === 'right_hip') return;
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), py(ja.y));
+    ctx.lineTo(px(jb.x), py(jb.y));
+    ctx.stroke();
+  });
+
+  // servo joints (circles) at every joint
+  const jointNames = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
+    'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+  jointNames.forEach(name => {
+    const j = joints[name];
+    if (!j) return;
+    const x = px(j.x), y = py(j.y);
+    ctx.fillStyle = metal;
+    ctx.beginPath(); ctx.arc(x, y, 7*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.fillStyle = glow;
+    ctx.shadowColor = glow; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(x, y, 3*scale, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  // robotic visor head
+  if (joints.nose) {
+    const hx = px(joints.nose.x), hy = py(joints.nose.y);
+    const r = 24 * scale;
+    // helmet shell
+    ctx.fillStyle = 'rgba(40,48,56,0.95)';
+    ctx.strokeStyle = metal;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(hx, hy, r*0.85, r, 0, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+    // glowing visor band with two eyes
+    ctx.shadowColor = glow; ctx.shadowBlur = 10;
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(hx - r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx + r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+// Offscreen canvas used to sample + filter the face region pixels.
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+// FULL-SCREEN filter for thermal / negative: the entire camera view
+// (whole body + background) is remapped, which also hides the face
+// everywhere on screen. Processed at a downscaled resolution for speed,
+// then scaled up — keeps it light enough for the Raspberry Pi.
+const FILTER_DS = 256; // downscale width for full-screen processing
+function drawFullScreenFilter(w, h, mode) {
+  const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+  if (!vw || !vh) return;
+  const sw = FILTER_DS, sh = Math.max(2, Math.round(FILTER_DS * vh / vw));
+  offCanvas.width = sw; offCanvas.height = sh;
+  offCtx.drawImage(video, 0, 0, sw, sh);
+  let img;
+  try { img = offCtx.getImageData(0, 0, sw, sh); }
+  catch (e) { return; }
+  const d = img.data;
+  if (mode === 'thermal') {
+    for (let i = 0; i < d.length; i += 4) {
+      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      const c = thermalColor(L);
+      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
+    }
+  } else { // negative
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.translate(w, 0); ctx.scale(-1, 1); // mirror to match user
+  ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h);
+  ctx.restore();
+}
+
+// Thermal color ramp: map brightness (0-255) to a cold->hot color.
+function thermalColor(L) {
+  const t = L / 255;
+  // stops: deep blue -> blue -> red -> yellow -> white
+  const stops = [
+    [0.0,  10, 0,  60],
+    [0.25, 20, 0, 230],
+    [0.5, 230, 0,  40],
+    [0.75,255,200, 0],
+    [1.0, 255,255,255],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i], b = stops[i+1];
+    if (t >= a[0] && t <= b[0]) {
+      const f = (t - a[0]) / (b[0] - a[0]);
+      return [a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, a[3]+(b[3]-a[3])*f];
+    }
+  }
+  return [255,255,255];
+}
+
+// PRIVACY MODE: the participant's face region is sampled and run through a
+// camera-style filter (thermal / negative / pixelate) so the actual face
+// is never shown — only an abstracted, unrecognizable version. Processing
+// is local and nothing is stored. Small region only, so it stays light.
+function drawPrivacyFilter(joints, w, h, mode) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  const nose = joints.nose;
+  if (!nose) return;
+  const le = joints.left_eye, re = joints.right_eye;
+  const lear = joints.left_ear, rear = joints.right_ear;
+
+  // face half-width (normalized) from eyes, else ears, else default
+  let halfW;
+  if (le && re) halfW = Math.hypot(le.x-re.x, le.y-re.y) * 1.7;
+  else if (lear && rear) halfW = Math.hypot(lear.x-rear.x, lear.y-rear.y) * 0.95;
+  else halfW = 0.12;
+  halfW = Math.max(0.06, Math.min(0.28, halfW));
+
+  const cx = nose.x, cy = nose.y;
+  // normalized face box (a bit taller than wide)
+  let nx0 = cx - halfW, ny0 = cy - halfW*1.15;
+  let nw = halfW*2, nh = halfW*2.35;
+  // clamp
+  nx0 = Math.max(0, nx0); ny0 = Math.max(0, ny0);
+  nw = Math.min(1 - nx0, nw); nh = Math.min(1 - ny0, nh);
+
+  const bx = Math.floor(nx0*vw), by = Math.floor(ny0*vh);
+  const bw = Math.max(2, Math.floor(nw*vw)), bh = Math.max(2, Math.floor(nh*vh));
+
+  offCanvas.width = bw; offCanvas.height = bh;
+  offCtx.drawImage(video, bx, by, bw, bh, 0, 0, bw, bh);
+
+  let img;
+  try { img = offCtx.getImageData(0, 0, bw, bh); }
+  catch (e) { return; }
+  const d = img.data;
+
+  if (mode === 'thermal') {
+    for (let i = 0; i < d.length; i += 4) {
+      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      const c = thermalColor(L);
+      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
+    }
+    offCtx.putImageData(img, 0, 0);
+  } else if (mode === 'negative') {
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
+    }
+    offCtx.putImageData(img, 0, 0);
+  } else if (mode === 'pixel') {
+    // mosaic: average blocks
+    const block = Math.max(4, Math.floor(bw / 12));
+    for (let yy = 0; yy < bh; yy += block) {
+      for (let xx = 0; xx < bw; xx += block) {
+        let r=0,g=0,b=0,n=0;
+        for (let j=0;j<block;j++){
+          for (let k=0;k<block;k++){
+            const px2 = xx+k, py2 = yy+j;
+            if (px2>=bw||py2>=bh) continue;
+            const idx=(py2*bw+px2)*4;
+            r+=d[idx]; g+=d[idx+1]; b+=d[idx+2]; n++;
+          }
+        }
+        r/=n; g/=n; b/=n;
+        for (let j=0;j<block;j++){
+          for (let k=0;k<block;k++){
+            const px2 = xx+k, py2 = yy+j;
+            if (px2>=bw||py2>=bh) continue;
+            const idx=(py2*bw+px2)*4;
+            d[idx]=r; d[idx+1]=g; d[idx+2]=b;
+          }
+        }
+      }
+    }
+    offCtx.putImageData(img, 0, 0);
+  }
+
+  // draw filtered patch onto overlay, mirrored to match the displayed video,
+  // clipped to a soft ellipse so it reads as a face, not a rectangle
+  const sx0 = (1 - (nx0 + nw)) * w;
+  const sy0 = ny0 * h;
+  const sw = nw * w, sh = nh * h;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
+  ctx.clip();
+  // mirror horizontally
+  ctx.translate(sx0 + sw, sy0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(offCanvas, 0, 0, bw, bh, 0, 0, sw, sh);
+  ctx.restore();
+
+  // subtle tech frame around the face box
+  ctx.save();
+  ctx.strokeStyle = mode === 'thermal' ? 'rgba(255,180,120,0.6)'
+                   : mode === 'negative' ? 'rgba(180,255,220,0.5)'
+                   : 'rgba(200,200,220,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// rough face scale from ear distance or eye distance, for fallback sizing
+function faceScaleRef(joints, h) {
+  const le = joints.left_ear, re = joints.right_ear;
+  if (le && re) return Math.hypot((le.x-re.x), (le.y-re.y)) * 900;
+  return h * 0.14;
+}
+
+// ---- Abstract movement-line field (Laban / Kandinsky inspired) ----
+// Instead of a literal skeleton, the participant's body drives 100+
+// self-generating lines, arcs and curves anchored to their joints. As
+// they move, the lines form gestural shapes echoing the reference
+// dance-analysis drawings. Face is never drawn here, so privacy holds.
+const BODY_JOINTS = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
+  'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee',
+  'left_ankle','right_ankle'];
+
+function makeLineAgent() {
+  const types = ['line','zig','arc','curve'];
+  // green motion lines in a few shades
+  const tones = [
+    'rgba(70,235,130,','rgba(70,235,130,','rgba(120,255,170,',
+    'rgba(35,180,95,','rgba(150,255,190,',
+  ];
+  return {
+    a: BODY_JOINTS[(Math.random()*BODY_JOINTS.length)|0],
+    b: BODY_JOINTS[(Math.random()*BODY_JOINTS.length)|0],
+    type: types[(Math.random()*types.length)|0],
+    angle: Math.random()*Math.PI*2,
+    len: 0.12 + Math.random()*0.4,
+    rad: 0.05 + Math.random()*0.3,
+    curv: (Math.random()*2-1),
+    bend: (Math.random()*2-1),
+    phase: Math.random()*Math.PI*2,
+    speed: 0.2 + Math.random()*1.1,
+    tone: tones[(Math.random()*tones.length)|0],
+    alpha: 0.25 + Math.random()*0.45,
+    width: 0.6 + Math.random()*1.6,
+  };
+}
+const LINE_AGENTS = Array.from({ length: 110 }, makeLineAgent);
+
+function drawBodyLines(joints, w, h, t) {
+  const px = (nx) => (1 - nx) * w;
+  const py = (ny) => ny * h;
+  // centroid fallback for any joint the model can't currently see
+  let cxs=0, cys=0, n=0;
+  BODY_JOINTS.forEach(k => { if (joints[k]) { cxs+=px(joints[k].x); cys+=py(joints[k].y); n++; } });
+  if (n === 0) return;
+  const cX = cxs/n, cY = cys/n;
+  const pos = (k) => { const j = joints[k]; return j ? { x:px(j.x), y:py(j.y) } : { x:cX, y:cY }; };
+
+  ctx.save();
+  ctx.lineCap = 'round';
+
+  // occasionally respawn an agent -> continuous "self-generating" feel
+  if (Math.random() < 0.06) LINE_AGENTS[(Math.random()*LINE_AGENTS.length)|0] = makeLineAgent();
+
+  for (const ag of LINE_AGENTS) {
+    const A = pos(ag.a), B = pos(ag.b);
+    const ph = t*ag.speed + ag.phase;
+    const al = (ag.alpha*(0.6 + 0.4*Math.sin(ph*0.8+1))).toFixed(3);
+    ctx.strokeStyle = ag.tone + al + ')';
+    ctx.lineWidth = ag.width;
+    ctx.beginPath();
+
+    if (ag.type === 'line') {
+      const ang = ag.angle + Math.sin(ph)*0.5;
+      const L = ag.len*h*(0.7 + 0.3*Math.sin(ph*0.7));
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(A.x + Math.cos(ang)*L, A.y + Math.sin(ang)*L);
+    } else if (ag.type === 'zig') {
+      const ang = ag.angle + Math.sin(ph*0.6)*0.4;
+      const L = ag.len*h*0.6;
+      const bx = A.x + Math.cos(ang)*L, by = A.y + Math.sin(ang)*L;
+      const ang2 = ang + (ag.bend>0?1:-1)*(0.8 + 0.5*Math.sin(ph));
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(bx, by);
+      ctx.lineTo(bx + Math.cos(ang2)*L*0.8, by + Math.sin(ang2)*L*0.8);
+    } else if (ag.type === 'arc') {
+      const c = { x:(A.x+B.x)/2, y:(A.y+B.y)/2 };
+      const r = ag.rad*h*(0.8 + 0.2*Math.sin(ph));
+      const s = ag.angle + ph*0.3;
+      const e = s + (1.4 + Math.sin(ph)*0.8);
+      ctx.arc(c.x, c.y, r, s, e);
+    } else { // curve
+      const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
+      const dx=B.x-A.x, dy=B.y-A.y;
+      const len=Math.hypot(dx,dy)||1;
+      const nxp=-dy/len, nyp=dx/len;
+      const off=ag.curv*h*0.18*(0.6 + 0.4*Math.sin(ph));
+      ctx.moveTo(A.x, A.y);
+      ctx.quadraticCurveTo(mx+nxp*off, my+nyp*off, B.x, B.y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Sharper, clearer render for the participant's own tracked body —
+// stays legible/technical since this is feedback, not the "spirit" guide
+function drawUserSkeleton(joints, w, h) {
+  const px = (nx) => (1 - nx) * w; // mirrored
+  ctx.save();
+  ctx.strokeStyle = 'rgba(47,111,79,0.85)';
+  ctx.fillStyle = 'rgba(47,111,79,0.85)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  SKELETON_PAIRS.forEach(([a, b]) => {
+    const ja = joints[a], jb = joints[b];
+    if (!ja || !jb) return;
+    ctx.beginPath();
+    ctx.moveTo(px(ja.x), ja.y * h);
+    ctx.lineTo(px(jb.x), jb.y * h);
+    ctx.stroke();
+  });
+  const faceKp = ['nose','left_eye','right_eye','left_ear','right_ear'];
+  Object.entries(joints).forEach(([name, j]) => {
+    if (faceKp.includes(name)) return; // covered by robot face
+    ctx.beginPath();
+    ctx.arc(px(j.x), j.y * h, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function keypointsToNamed(keypoints) {
+  const map = {};
+  keypoints.forEach(kp => {
+    if (kp.score > 0.35) {
+      map[kp.name] = { x: kp.x / video.videoWidth, y: kp.y / video.videoHeight };
+    }
+  });
+  return map;
+}
+
+async function renderLoop() {
+  if (!running) return;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const now = performance.now() / 1000;
+
+  // Background layer: full-screen thermal/negative (also hides face everywhere)
+  if (faceFilterMode === 'thermal' || faceFilterMode === 'negative') {
+    drawFullScreenFilter(w, h, faceFilterMode);
+  }
+
+  // Live detected pose — kept sharper/clearer since it's your own feedback
+  try {
+    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
+    if (poses[0]) {
+      const named = keypointsToNamed(poses[0].keypoints);
+      drawBodyLines(named, w, h, now);
+      // face-only blur applies only in pixel mode (thermal/negative are full-screen)
+      if (faceFilterMode === 'pixel') drawPrivacyFilter(named, w, h, 'pixel');
+    }
+  } catch (e) {
+    // skip frame on transient error
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+startBtn.addEventListener('click', async () => {
+  try {
+    startScreen.classList.add('hidden');
+    stage.classList.remove('hidden');
+    resizeCanvas();
+
+    setStatus('Starting camera…', 'loading');
+    await setupCamera();
+
+    setStatus('Loading model…', 'loading');
+    await loadModel();
+
+    setStatus('Live', 'ready');
+    running = true;
+    filterToggle.classList.remove('hidden');
+    filterToggle.textContent = FILTER_LABELS[faceFilterMode];
+    renderLoop();
+  } catch (err) {
+    const msg = (err && (err.message || err.name)) ? (err.name + ': ' + err.message) : String(err);
+    setStatus(msg, 'error');
+    console.error(err);
+  }
+});
+</script>
+
+</body>
+</html>
