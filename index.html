@@ -1040,6 +1040,35 @@ function currentTargetPose(t) {
   return poseCur;
 }
 
+// Continuous dance: flow through a choreography sequence without long holds,
+// plus a live rhythmic overlay (sway, bounce, hand flourish) so the line
+// keeps moving like a real dancer instead of freezing between poses.
+const CHOREO = ['neutral','armsUp','rightUp','armsOutT','leftUp','handsHips',
+  'oneKneeUp','armsUp','leanLeft','clapCenter','leanRight','prayer'];
+const STEP = 0.7; // seconds per step (fast)
+function currentDancePose(t) {
+  const total = CHOREO.length * STEP;
+  const tt = t % total;
+  const idx = Math.floor(tt / STEP);
+  let f = (tt % STEP) / STEP;
+  f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2; // ease each step
+  const a = POSES[CHOREO[idx % CHOREO.length]]();
+  const b = POSES[CHOREO[(idx+1) % CHOREO.length]]();
+  const base = lerpPose(a, b, f);
+
+  // live rhythmic overlay
+  const sway = Math.sin(t*2.2) * 0.014;   // weight shift side to side
+  const bob  = Math.sin(t*4.4) * 0.010;   // bounce (double-time beat)
+  const fl   = Math.sin(t*3.1) * 0.022;   // hand flourish
+  const out = {};
+  for (const k in base) out[k] = { x: base[k].x + sway, y: base[k].y + bob };
+  if (out.left_wrist)  { out.left_wrist.x  -= fl; out.left_wrist.y  += fl*0.5; }
+  if (out.right_wrist) { out.right_wrist.x += fl; out.right_wrist.y -= fl*0.5; }
+  if (out.left_elbow)  out.left_elbow.y  += Math.sin(t*3.1+1)*0.008;
+  if (out.right_elbow) out.right_elbow.y += Math.sin(t*3.1+2)*0.008;
+  return out;
+}
+
 let tgtCur = null, tgtNext = null, tgt0 = null;
 const HOLD = 1.0, MORPH = 0.9;
 
@@ -1306,7 +1335,7 @@ async function renderLoop() {
   ctx.fillStyle = '#12140f';
   ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
   ctx.restore();
-  const pose = currentTargetPose(now);
+  const pose = currentDancePose(now);
   drawStickLine(pose, targetRect, { mirror:false, width:3, color:'rgba(226,34,54,0.95)', headR:16, sc:1.05, spreadY:1.25 });
 
   // --- Camera panel: (filtered) video + your green figure ---
