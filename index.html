@@ -1138,6 +1138,54 @@ function drawFigureRect(joints, rect, opts) {
   ctx.restore();
 }
 
+// Stick-LINE figure matching the yellow sketch: a single spine line, with
+// arms and legs branching off — NO torso rectangle. Bendable, elegant.
+// Uses mid-shoulder and mid-hip as spine joints so the body reads as lines.
+function drawStickLine(joints, rect, opts) {
+  const sc = opts.sc || 1, spreadY = opts.spreadY || 1;
+  const px = (nx) => {
+    let x = 0.5 + (nx - 0.5) * sc;
+    x = opts.mirror ? (1 - x) : x;
+    return rect.x + x * rect.w;
+  };
+  const py = (ny) => rect.y + (0.5 + (ny - 0.5) * spreadY) * rect.h;
+  const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
+  const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
+
+  const ls=P('left_shoulder'), rs=P('right_shoulder'), lh=P('left_hip'), rh=P('right_hip');
+  const neck = mid(ls, rs);
+  const pelvis = mid(lh, rh);
+
+  const seg = (a, b) => { if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); };
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = opts.color;
+  ctx.lineWidth = opts.width;
+
+  // spine (neck -> pelvis)
+  seg(neck, pelvis);
+  // shoulders line (short) so arms branch naturally
+  seg(ls, rs);
+  // arms
+  seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
+  seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
+  // hips line (short) so legs branch
+  seg(lh, rh);
+  // legs
+  seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
+  seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
+
+  // head (small circle above neck, at nose)
+  const nose = P('nose');
+  if (nose) { ctx.beginPath(); ctx.arc(nose.x, nose.y, opts.headR||14, 0, Math.PI*2); ctx.stroke(); }
+  // neck link to head
+  if (nose && neck) seg(nose, neck);
+
+  ctx.restore();
+}
+
 // Draw the (optionally filtered) camera video into a rect, mirrored.
 function drawCameraToRect(rect, mode) {
   const vw = video.videoWidth||0, vh = video.videoHeight||0;
@@ -1248,16 +1296,10 @@ async function renderLoop() {
   ctx.clearRect(0, 0, w, h);
   const now = performance.now() / 1000;
 
-  // Split into two panels: landscape -> left/right, portrait -> top/bottom.
-  const landscape = w >= h;
-  let targetRect, camRect;
-  if (landscape) {
-    targetRect = { x: 0, y: 0, w: w/2, h };
-    camRect    = { x: w/2, y: 0, w: w/2, h };
-  } else {
-    targetRect = { x: 0, y: 0, w, h: h/2 };
-    camRect    = { x: 0, y: h/2, w, h: h/2 };
-  }
+  // Always split left | right (landscape / laptop friendly)
+  let targetRect = { x: 0, y: 0, w: w/2, h };
+  let camRect    = { x: w/2, y: 0, w: w/2, h };
+  const landscape = true;
 
   // --- Target panel: clean background + crimson pose figure to copy ---
   ctx.save();
@@ -1265,7 +1307,7 @@ async function renderLoop() {
   ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
   ctx.restore();
   const pose = currentTargetPose(now);
-  drawFigureRect(pose, targetRect, { mirror:false, outline:0, casing:0, core:2.5, color:'rgba(226,34,54,0.95)', headR:15, sc:1.05, spreadY:1.25, thin:true });
+  drawStickLine(pose, targetRect, { mirror:false, width:3, color:'rgba(226,34,54,0.95)', headR:16, sc:1.05, spreadY:1.25 });
 
   // --- Camera panel: (filtered) video + your green figure ---
   drawCameraToRect(camRect, faceFilterMode);
@@ -1274,7 +1316,7 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
-      drawFigureRect(named, camRect, { mirror:true, outline:7, core:5, color:'rgba(70,235,130,0.95)', headR:15, sc:1, spreadY:1 });
+      drawStickLine(named, camRect, { mirror:true, width:4, color:'rgba(70,235,130,0.95)', headR:14, sc:1, spreadY:1 });
     }
   } catch (e) {
     // skip frame on transient error
