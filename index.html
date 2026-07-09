@@ -1456,11 +1456,27 @@ const DANCE_MOVES = [
 ];
 
 let moveIdx = 0, move0 = null;
-const MOVE_TIME = 5.0;
+const MOVE_TIME = 5.0;   // seconds each move is shown
+const BLEND = 1.2;       // seconds to smoothly cross into the next move
+
 function currentMovePose(t) {
   if (move0 === null) move0 = t;
-  if (t - move0 >= MOVE_TIME) { moveIdx = (moveIdx+1) % DANCE_MOVES.length; move0 = t; }
-  return DANCE_MOVES[moveIdx].fn(t);
+  const elapsed = t - move0;
+  if (elapsed >= MOVE_TIME) {
+    moveIdx = (moveIdx + 1) % DANCE_MOVES.length;
+    move0 = t;
+    return DANCE_MOVES[moveIdx].fn(t);
+  }
+  const cur = DANCE_MOVES[moveIdx].fn(t);
+  // during the last BLEND seconds, ease toward the next move's pose
+  if (elapsed > MOVE_TIME - BLEND) {
+    let f = (elapsed - (MOVE_TIME - BLEND)) / BLEND;
+    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2; // ease in-out
+    const nextIdx = (moveIdx + 1) % DANCE_MOVES.length;
+    const nxt = DANCE_MOVES[nextIdx].fn(t);
+    return lerpPose(cur, nxt, f);
+  }
+  return cur;
 }
 function currentMoveName() { return (moveIdx+1)+'/'+DANCE_MOVES.length+'  '+DANCE_MOVES[moveIdx].name; }
 
