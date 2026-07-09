@@ -277,7 +277,7 @@
   </div>
 
   <button id="layoutToggle" class="hidden">Guide: Beside</button>
-  <button id="filterToggle" class="hidden">Filter: Thermal</button>
+  <button id="filterToggle" class="hidden">Filter: Off</button>
 
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
@@ -334,9 +334,9 @@ let detector = null;
 let running = false;
 let layoutMode = 'beside'; // 'beside' or 'overlay'
 
-const FILTER_MODES = ['thermal', 'negative', 'pixel'];
-const FILTER_LABELS = { thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
-let faceFilterMode = 'thermal';
+const FILTER_MODES = ['none', 'thermal', 'negative', 'pixel'];
+const FILTER_LABELS = { none: 'Filter: Off', thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
+let faceFilterMode = 'none';
 
 layoutToggle.addEventListener('click', () => {
   layoutMode = layoutMode === 'beside' ? 'overlay' : 'beside';
@@ -1081,18 +1081,24 @@ function drawTrackingLine(joints, rect, opts) {
 // flowing on), completes, holds briefly, then clears and draws the next —
 // like the reference ribbon-curve dance drawings. Not morphing: drawing.
 const DANCE_CURVES = [
-  [[0.30,0.82],[0.40,0.55],[0.36,0.34],[0.52,0.22],[0.66,0.30],[0.60,0.16]], // upward reach curve
-  [[0.34,0.20],[0.46,0.36],[0.40,0.54],[0.58,0.60],[0.50,0.78],[0.64,0.88]], // S descend
-  [[0.62,0.18],[0.50,0.30],[0.58,0.46],[0.42,0.54],[0.52,0.72],[0.40,0.88]], // reverse S
-  [[0.30,0.30],[0.48,0.26],[0.60,0.40],[0.50,0.58],[0.62,0.72],[0.44,0.86]], // question sweep
-  [[0.34,0.86],[0.46,0.64],[0.40,0.44],[0.56,0.36],[0.50,0.22],[0.66,0.16]], // rising flourish
-  [[0.40,0.16],[0.56,0.24],[0.48,0.42],[0.62,0.52],[0.44,0.66],[0.58,0.86]], // zig-flow
+  // flowing S: hand high, spine curve, leg extends low
+  [[0.58,0.14],[0.50,0.30],[0.56,0.46],[0.44,0.60],[0.50,0.78],[0.40,0.90]],
+  // question-mark sweep: hand curls over, body drops straight
+  [[0.44,0.20],[0.58,0.16],[0.62,0.30],[0.50,0.40],[0.50,0.62],[0.50,0.88]],
+  // deep bend: hand forward-low, arched back, leg back
+  [[0.34,0.40],[0.48,0.30],[0.58,0.40],[0.52,0.58],[0.60,0.74],[0.46,0.90]],
+  // tall reach: hand at very top, long gentle spine to low leg
+  [[0.52,0.10],[0.50,0.28],[0.54,0.46],[0.48,0.64],[0.52,0.80],[0.44,0.92]],
+  // side lean: hand out high, waist curve, leg planted
+  [[0.62,0.18],[0.50,0.30],[0.44,0.46],[0.56,0.58],[0.48,0.74],[0.58,0.90]],
+  // leap sweep: hand back, big diagonal through hip to far leg
+  [[0.38,0.16],[0.50,0.28],[0.48,0.46],[0.58,0.58],[0.52,0.74],[0.64,0.90]],
 ];
 const clampC = (v) => Math.max(0.06, Math.min(0.94, v));
 function randomCurve() {
   const base = DANCE_CURVES[(Math.random()*DANCE_CURVES.length)|0];
-  return base.map(p => [ clampC(p[0] + (Math.random()*2-1)*0.03),
-                         clampC(p[1] + (Math.random()*2-1)*0.03) ]);
+  return base.map(p => [ clampC(p[0] + (Math.random()*2-1)*0.025),
+                         clampC(p[1] + (Math.random()*2-1)*0.025) ]);
 }
 
 let curCurve = randomCurve();
@@ -1515,6 +1521,17 @@ async function renderLoop() {
       const named = keypointsToNamed(poses[0].keypoints);
       if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
       drawTrackingLine(named, camRect, {});
+      // hint if the 3 tracking points aren't all visible
+      const haveRW = !!named.right_wrist, haveHip = !!(named.left_hip||named.right_hip), haveLA = !!named.left_ankle;
+      if (!(haveRW && haveHip && haveLA)) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(camRect.x+10, camRect.y+camRect.h-46, 240, 34);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.font = '600 13px -apple-system, sans-serif';
+        ctx.fillText('Step back — show hand, hip & foot', camRect.x+18, camRect.y+camRect.h-24);
+        ctx.restore();
+      }
     }
   } catch (e) {
     // skip frame on transient error
