@@ -1459,24 +1459,59 @@ let moveIdx = 0, move0 = null;
 const MOVE_TIME = 5.0;   // seconds each move is shown
 const BLEND = 1.2;       // seconds to smoothly cross into the next move
 
+// --- Wandering: the dancer travels around the panel while performing ---
+// Smooth pseudo-random path using layered sines (never leaves the panel).
+function wanderOffset(t) {
+  const wx = Math.sin(t*0.35) * 0.16 + Math.sin(t*0.13+2.1) * 0.09;
+  const wy = Math.sin(t*0.22+1.0) * 0.05 + Math.sin(t*0.09+0.4) * 0.03;
+  // gentle walking bob synced to horizontal travel speed
+  const speed = Math.abs(Math.cos(t*0.35)*0.16*0.35 + Math.cos(t*0.13+2.1)*0.09*0.13);
+  const bob = Math.abs(Math.sin(t*3.2)) * Math.min(0.012, speed*0.5);
+  return { x: wx, y: wy + bob };
+}
+
+// --- Inertia smoothing: joints follow targets with momentum, like a body
+// with weight, removing any mechanical snap from the raw math motion. ---
+let smoothPose = null;
+const SMOOTH = 0.16; // lower = heavier/smoother, higher = snappier
+function smoothToward(target) {
+  if (!smoothPose) {
+    smoothPose = {};
+    for (const k in target) smoothPose[k] = { x: target[k].x, y: target[k].y };
+    return smoothPose;
+  }
+  for (const k in target) {
+    if (!smoothPose[k]) smoothPose[k] = { x: target[k].x, y: target[k].y };
+    smoothPose[k].x += (target[k].x - smoothPose[k].x) * SMOOTH;
+    smoothPose[k].y += (target[k].y - smoothPose[k].y) * SMOOTH;
+  }
+  return smoothPose;
+}
+
 function currentMovePose(t) {
   if (move0 === null) move0 = t;
   const elapsed = t - move0;
   if (elapsed >= MOVE_TIME) {
     moveIdx = (moveIdx + 1) % DANCE_MOVES.length;
     move0 = t;
-    return DANCE_MOVES[moveIdx].fn(t);
   }
+  let pose;
+  const e2 = t - move0;
   const cur = DANCE_MOVES[moveIdx].fn(t);
-  // during the last BLEND seconds, ease toward the next move's pose
-  if (elapsed > MOVE_TIME - BLEND) {
-    let f = (elapsed - (MOVE_TIME - BLEND)) / BLEND;
-    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2; // ease in-out
-    const nextIdx = (moveIdx + 1) % DANCE_MOVES.length;
-    const nxt = DANCE_MOVES[nextIdx].fn(t);
-    return lerpPose(cur, nxt, f);
+  if (e2 > MOVE_TIME - BLEND) {
+    let f = (e2 - (MOVE_TIME - BLEND)) / BLEND;
+    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
+    const nxt = DANCE_MOVES[(moveIdx + 1) % DANCE_MOVES.length].fn(t);
+    pose = lerpPose(cur, nxt, f);
+  } else {
+    pose = cur;
   }
-  return cur;
+  // apply wandering travel across the panel
+  const wo = wanderOffset(t);
+  const moved = {};
+  for (const k in pose) moved[k] = { x: pose[k].x + wo.x, y: pose[k].y + wo.y };
+  // apply inertia smoothing for lifelike weight
+  return smoothToward(moved);
 }
 function currentMoveName() { return (moveIdx+1)+'/'+DANCE_MOVES.length+'  '+DANCE_MOVES[moveIdx].name; }
 
