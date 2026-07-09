@@ -592,6 +592,11 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', resizeCanvas);
 
+// Tap/click anywhere to start a new dance session when idle
+canvas.addEventListener('click', () => {
+  if (running && !sessionActive) startSession(performance.now() / 1000);
+});
+
 async function setupCamera() {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -1391,71 +1396,158 @@ function poseFrom(res){
 
 // 60 named moves mapped to the closest honest stick-figure motion.
 const DANCE_MOVES = [
-  {name:'Shoulder & chest vibration', fn:t=>poseFrom(M.vibrate(t))},
-  {name:'Circular formation, upper-body rotation', fn:t=>poseFrom(M.headCircle(t,0.05))},
-  {name:'Head & torso circular motion', fn:t=>poseFrom(M.headCircle(t))},
-  {name:'Side head shake, trembling hands', fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.008,26)})},
-  {name:'Repetitive rhythmic movement', fn:t=>poseFrom(M.sway(t))},
-  {name:'Single-leg hip strike', fn:t=>poseFrom(M.hipStrike(t))},
-  {name:'Deep forward/backward torso arch', fn:t=>poseFrom(M.torsoArch(t))},
-  {name:'Continuous body vibration', fn:t=>poseFrom(M.vibrate(t,0.010,24))},
-  {name:'Body rocking (seated rhythm)', fn:t=>poseFrom({...M.sway(t,0.03),...M.torsoArch(t*0.6)})},
-  {name:'Forward-backward head movement', fn:t=>poseFrom(M.headNod(t))},
-  {name:'Repeated simple pattern', fn:t=>poseFrom(M.sway(t,0.04))},
-  {name:'Group rhythmic clapping', fn:t=>poseFrom(M.clap(t))},
-  {name:'Circle movement, rhythmic response', fn:t=>poseFrom({...M.sway(t),...M.headCircle(t,0.03)})},
-  {name:'Wide semicircle, shoulder to shoulder', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Synchronized clapping', fn:t=>poseFrom(M.clap(t,5))},
-  {name:'Leaping, stomping & clapping', fn:t=>poseFrom({...M.stomp(t),...M.clap(t,4)})},
-  {name:"Circling to leader's voice", fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t*0.5)})},
-  {name:'Hand on shoulder, moving cane', fn:t=>poseFrom(M.oneArmUp(t))},
-  {name:'Balanced sword line', fn:t=>poseFrom(M.armsOpen(t*0.5))},
-  {name:'Swinging sword overhead', fn:t=>poseFrom(M.overhead(t))},
-  {name:'Chest & shoulder vibration', fn:t=>poseFrom(M.vibrate(t,0.014,20))},
-  {name:'Wooden stick defensive stance', fn:t=>poseFrom(M.pullChest(t*0.6))},
-  {name:'Circling opponent, seeking pole', fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t)})},
-  {name:'Scarves while bending legs', fn:t=>poseFrom({...M.kneeBend(t),...M.wave(t)})},
-  {name:'Facing dancer, waving scarves', fn:t=>poseFrom(M.wave(t))},
-  {name:'Circular movement, colored scarves', fn:t=>poseFrom({...M.headCircle(t,0.03),...M.wave(t)})},
-  {name:'Clapping while seated', fn:t=>poseFrom(M.clap(t))},
-  {name:'Pulling arms against resistance', fn:t=>poseFrom(M.pullChest(t))},
-  {name:'Arm circles, weight side-to-side', fn:t=>poseFrom({...M.armCircles(t),__shift:Math.sin(t*2)*0.05})},
-  {name:'Arms drawn to chest', fn:t=>poseFrom(M.pullChest(t))},
-  {name:'Step forward, arms up', fn:t=>poseFrom(M.reach(t))},
-  {name:'Body tension & release', fn:t=>poseFrom({...M.vibrate(t,0.006,16),...M.torsoArch(t*0.5)})},
-  {name:'Silk scarf over face, upright', fn:t=>poseFrom(M.still(t))},
-  {name:'Kneeling, rotating torso', fn:t=>poseFrom({...M.kneeBend(t),...M.twist(t)})},
-  {name:'Arms crossed over chest', fn:t=>poseFrom({left_wrist:{x:CXX+0.04,y:SHY+0.06},right_wrist:{x:CXX-0.04,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.08},right_elbow:{x:CXX+0.12,y:SHY+0.08}})},
-  {name:'Slow controlled weight shifting', fn:t=>poseFrom(M.sway(t,0.06))},
-  {name:'Broad open posture', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Paused stillness', fn:t=>poseFrom(M.still(t))},
-  {name:'Kneeling, chest lifted, arms out', fn:t=>poseFrom({...M.kneeBend(t*0.5),...M.armsOpen(t*0.5)})},
-  {name:'Gradual body rotation', fn:t=>poseFrom(M.spin(t,1.2))},
-  {name:'Step forward, measured', fn:t=>poseFrom(M.reach(t*0.6))},
-  {name:'Weight shift, stable upper body', fn:t=>poseFrom(M.sway(t,0.05))},
-  {name:'Open arms, chest to sky', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Complete stillness', fn:t=>poseFrom(M.still(t))},
-  {name:'Turning, controlled footwork', fn:t=>poseFrom(M.spin(t,2))},
-  {name:'Deep knee bending', fn:t=>poseFrom(M.kneeBend(t))},
-  {name:'Grounded strong legs', fn:t=>poseFrom(M.kneeBend(t*0.5))},
-  {name:'Calm controlled gestures', fn:t=>poseFrom(M.armCircles(t*0.5))},
-  {name:'Slow deliberate movement', fn:t=>poseFrom(M.sway(t,0.04))},
-  {name:'Upright, open arms', fn:t=>poseFrom(M.armsOpen(t*0.6))},
-  {name:'Upright, head inclined', fn:t=>poseFrom({...M.still(t),nose:{x:CXX+0.03,y:0.29}})},
-  {name:'Single-foot pivot, arms extended', fn:t=>poseFrom(M.spin(t,2.5))},
-  {name:'Rapid spinning on one foot', fn:t=>poseFrom(M.spin(t,6))},
-  {name:'Twisting waist & hips', fn:t=>poseFrom(M.twist(t))},
-  {name:'Cross-step, fwd/back footwork', fn:t=>poseFrom(M.stomp(t*0.8))},
-  {name:'Upper body follows hip rhythm', fn:t=>poseFrom({...M.twist(t),...M.armCircles(t)})},
-  {name:'Drumming, alternating strikes', fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06}})},
-  {name:'Gentle sway, small waist twist', fn:t=>poseFrom({...M.sway(t,0.03),...M.twist(t*0.5)})},
-  {name:'Lifting & lowering implements', fn:t=>poseFrom(M.overhead(t*0.5))},
-  {name:'Exaggerated stomp, wide swings', fn:t=>poseFrom(M.stomp(t))},
-  {name:'Knee bend, rhythmic body', fn:t=>poseFrom({...M.kneeBend(t),...M.vibrate(t,0.006,18)})},
-  {name:'Peacock-like posture', fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10},right_wrist:{x:CXX+0.26,y:SHY-0.10},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04}})},
+  {name:'Shoulder & chest vibration', de:'Schulter- und Brustvibration', fn:t=>poseFrom(M.vibrate(t))},
+  {name:'Circular formation, upper-body rotation', de:'Kreisformation, Oberkörperrotation', fn:t=>poseFrom(M.headCircle(t,0.05))},
+  {name:'Head & torso circular motion', de:'Kopf- und Rumpfkreisbewegung', fn:t=>poseFrom(M.headCircle(t))},
+  {name:'Side head shake, trembling hands', de:'Kopfschütteln seitlich, zitternde Hände', fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.008,26)})},
+  {name:'Repetitive rhythmic movement', de:'Wiederholende rhythmische Bewegung', fn:t=>poseFrom(M.sway(t))},
+  {name:'Single-leg hip strike', de:'Hüftstoß auf einem Bein', fn:t=>poseFrom(M.hipStrike(t))},
+  {name:'Deep forward/backward torso arch', de:'Tiefe Rumpfbeuge vor und zurück', fn:t=>poseFrom(M.torsoArch(t))},
+  {name:'Continuous body vibration', de:'Anhaltende Körpervibration', fn:t=>poseFrom(M.vibrate(t,0.010,24))},
+  {name:'Body rocking (seated rhythm)', de:'Körperschaukeln (sitzender Rhythmus)', fn:t=>poseFrom({...M.sway(t,0.03),...M.torsoArch(t*0.6)})},
+  {name:'Forward-backward head movement', de:'Kopfbewegung vor und zurück', fn:t=>poseFrom(M.headNod(t))},
+  {name:'Repeated simple pattern', de:'Einfaches wiederholtes Muster', fn:t=>poseFrom(M.sway(t,0.04))},
+  {name:'Group rhythmic clapping', de:'Rhythmisches Klatschen in der Gruppe', fn:t=>poseFrom(M.clap(t))},
+  {name:'Circle movement, rhythmic response', de:'Kreisbewegung mit rhythmischer Antwort', fn:t=>poseFrom({...M.sway(t),...M.headCircle(t,0.03)})},
+  {name:'Wide semicircle, shoulder to shoulder', de:'Breiter Halbkreis, Schulter an Schulter', fn:t=>poseFrom(M.armsOpen(t))},
+  {name:'Synchronized clapping', de:'Synchrones Klatschen', fn:t=>poseFrom(M.clap(t,5))},
+  {name:'Leaping, stomping & clapping', de:'Springen, Stampfen und Klatschen', fn:t=>poseFrom({...M.stomp(t),...M.clap(t,4)})},
+  {name:"Circling to leader's voice", de:"Kreisen zur Stimme des Anführers", fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t*0.5)})},
+  {name:'Hand on shoulder, moving cane', de:'Hand auf Schulter, Stock bewegen', fn:t=>poseFrom(M.oneArmUp(t))},
+  {name:'Balanced sword line', de:'Balancierte Schwertlinie', fn:t=>poseFrom(M.armsOpen(t*0.5))},
+  {name:'Swinging sword overhead', de:'Schwert über dem Kopf schwingen', fn:t=>poseFrom(M.overhead(t))},
+  {name:'Chest & shoulder vibration', de:'Brust- und Schultervibration', fn:t=>poseFrom(M.vibrate(t,0.014,20))},
+  {name:'Wooden stick defensive stance', de:'Verteidigungshaltung mit Holzstab', fn:t=>poseFrom(M.pullChest(t*0.6))},
+  {name:'Circling opponent, seeking pole', de:'Gegner umkreisen, Stange suchen', fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t)})},
+  {name:'Scarves while bending legs', de:'Tücher mit gebeugten Beinen', fn:t=>poseFrom({...M.kneeBend(t),...M.wave(t)})},
+  {name:'Facing dancer, waving scarves', de:'Tänzer gegenüber, Tücher schwenken', fn:t=>poseFrom(M.wave(t))},
+  {name:'Circular movement, colored scarves', de:'Kreisbewegung mit bunten Tüchern', fn:t=>poseFrom({...M.headCircle(t,0.03),...M.wave(t)})},
+  {name:'Clapping while seated', de:'Klatschen im Sitzen', fn:t=>poseFrom(M.clap(t))},
+  {name:'Pulling arms against resistance', de:'Arme gegen Widerstand ziehen', fn:t=>poseFrom(M.pullChest(t))},
+  {name:'Arm circles, weight side-to-side', de:'Armkreise, Gewicht seitlich verlagern', fn:t=>poseFrom({...M.armCircles(t),__shift:Math.sin(t*2)*0.05})},
+  {name:'Arms drawn to chest', de:'Arme zur Brust ziehen', fn:t=>poseFrom(M.pullChest(t))},
+  {name:'Step forward, arms up', de:'Schritt vor, Arme hoch', fn:t=>poseFrom(M.reach(t))},
+  {name:'Body tension & release', de:'Körperspannung und Lösen', fn:t=>poseFrom({...M.vibrate(t,0.006,16),...M.torsoArch(t*0.5)})},
+  {name:'Silk scarf over face, upright', de:'Seidentuch vorm Gesicht, aufrecht', fn:t=>poseFrom(M.still(t))},
+  {name:'Kneeling, rotating torso', de:'Kniend, Rumpf drehen', fn:t=>poseFrom({...M.kneeBend(t),...M.twist(t)})},
+  {name:'Arms crossed over chest', de:'Arme vor der Brust gekreuzt', fn:t=>poseFrom({left_wrist:{x:CXX+0.04,y:SHY+0.06},right_wrist:{x:CXX-0.04,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.08},right_elbow:{x:CXX+0.12,y:SHY+0.08}})},
+  {name:'Slow controlled weight shifting', de:'Langsame kontrollierte Gewichtsverlagerung', fn:t=>poseFrom(M.sway(t,0.06))},
+  {name:'Broad open posture', de:'Breite offene Haltung', fn:t=>poseFrom(M.armsOpen(t))},
+  {name:'Paused stillness', de:'Innehaltende Stille', fn:t=>poseFrom(M.still(t))},
+  {name:'Kneeling, chest lifted, arms out', de:'Kniend, Brust gehoben, Arme offen', fn:t=>poseFrom({...M.kneeBend(t*0.5),...M.armsOpen(t*0.5)})},
+  {name:'Gradual body rotation', de:'Allmähliche Körperdrehung', fn:t=>poseFrom(M.spin(t,1.2))},
+  {name:'Step forward, measured', de:'Gemessener Schritt nach vorn', fn:t=>poseFrom(M.reach(t*0.6))},
+  {name:'Weight shift, stable upper body', de:'Gewichtsverlagerung, stabiler Oberkörper', fn:t=>poseFrom(M.sway(t,0.05))},
+  {name:'Open arms, chest to sky', de:'Offene Arme, Brust zum Himmel', fn:t=>poseFrom(M.armsOpen(t))},
+  {name:'Complete stillness', de:'Vollkommene Stille', fn:t=>poseFrom(M.still(t))},
+  {name:'Turning, controlled footwork', de:'Drehung mit kontrollierter Fußarbeit', fn:t=>poseFrom(M.spin(t,2))},
+  {name:'Deep knee bending', de:'Tiefe Kniebeuge', fn:t=>poseFrom(M.kneeBend(t))},
+  {name:'Grounded strong legs', de:'Geerdete starke Beine', fn:t=>poseFrom(M.kneeBend(t*0.5))},
+  {name:'Calm controlled gestures', de:'Ruhige kontrollierte Gesten', fn:t=>poseFrom(M.armCircles(t*0.5))},
+  {name:'Slow deliberate movement', de:'Langsame bewusste Bewegung', fn:t=>poseFrom(M.sway(t,0.04))},
+  {name:'Upright, open arms', de:'Aufrecht mit offenen Armen', fn:t=>poseFrom(M.armsOpen(t*0.6))},
+  {name:'Upright, head inclined', de:'Aufrecht, Kopf geneigt', fn:t=>poseFrom({...M.still(t),nose:{x:CXX+0.03,y:0.29}})},
+  {name:'Single-foot pivot, arms extended', de:'Drehung auf einem Fuß, Arme gestreckt', fn:t=>poseFrom(M.spin(t,2.5))},
+  {name:'Rapid spinning on one foot', de:'Schnelles Drehen auf einem Fuß', fn:t=>poseFrom(M.spin(t,6))},
+  {name:'Twisting waist & hips', de:'Taille und Hüften drehen', fn:t=>poseFrom(M.twist(t))},
+  {name:'Cross-step, fwd/back footwork', de:'Kreuzschritt, Fußarbeit vor/zurück', fn:t=>poseFrom(M.stomp(t*0.8))},
+  {name:'Upper body follows hip rhythm', de:'Oberkörper folgt Hüftrhythmus', fn:t=>poseFrom({...M.twist(t),...M.armCircles(t)})},
+  {name:'Drumming, alternating strikes', de:'Trommeln mit wechselnden Schlägen', fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06}})},
+  {name:'Gentle sway, small waist twist', de:'Sanftes Wiegen, kleine Taillendrehung', fn:t=>poseFrom({...M.sway(t,0.03),...M.twist(t*0.5)})},
+  {name:'Lifting & lowering implements', de:'Heben und Senken von Geräten', fn:t=>poseFrom(M.overhead(t*0.5))},
+  {name:'Exaggerated stomp, wide swings', de:'Kräftiges Stampfen, weite Schwünge', fn:t=>poseFrom(M.stomp(t))},
+  {name:'Knee bend, rhythmic body', de:'Kniebeuge mit rhythmischem Körper', fn:t=>poseFrom({...M.kneeBend(t),...M.vibrate(t,0.006,18)})},
+  {name:'Peacock-like posture', de:'Pfauenartige Haltung', fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10},right_wrist:{x:CXX+0.26,y:SHY-0.10},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04}})},
 ];
 
 let moveIdx = 0, move0 = null;
+
+// ---- Session system: 1-minute dance per participant ----
+// Each session shuffles the move order (different every time), plays an
+// upbeat synthesized beat, runs 60s, then returns to the start screen.
+let moveOrder = DANCE_MOVES.map((_, i) => i);
+let orderPos = 0;
+let sessionStart = null;
+const SESSION_LENGTH = 60; // seconds per participant
+let sessionActive = false;
+
+function shuffleOrder() {
+  moveOrder = DANCE_MOVES.map((_, i) => i);
+  for (let i = moveOrder.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [moveOrder[i], moveOrder[j]] = [moveOrder[j], moveOrder[i]];
+  }
+  orderPos = 0;
+  moveIdx = moveOrder[0];
+}
+
+// ---- Synthesized upbeat music (WebAudio, offline, no licensing) ----
+let audioCtx = null, beatTimer = null;
+function startBeat() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const bpm = 118, stepDur = 60 / bpm / 2; // 8th notes
+    let step = 0;
+    const kick = (time) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.setValueAtTime(150, time);
+      o.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+      g.gain.setValueAtTime(0.5, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(time); o.stop(time + 0.3);
+    };
+    const hat = (time, open) => {
+      const b = audioCtx.createBuffer(1, 2205, audioCtx.sampleRate);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/d.length, open?2:6);
+      const s = audioCtx.createBufferSource(); s.buffer = b;
+      const g = audioCtx.createGain(); g.gain.value = open?0.12:0.08;
+      const f = audioCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
+      s.connect(f); f.connect(g); g.connect(audioCtx.destination);
+      s.start(time);
+    };
+    const bass = (time, note) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = note;
+      const f = audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=500;
+      g.gain.setValueAtTime(0.16, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + stepDur*0.9);
+      o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+      o.start(time); o.stop(time + stepDur);
+    };
+    const bassline = [55, 55, 82.4, 55, 73.4, 55, 65.4, 82.4];
+    const tick = () => {
+      if (!sessionActive || !audioCtx) return;
+      const t0 = audioCtx.currentTime + 0.05;
+      if (step % 2 === 0) kick(t0);
+      hat(t0, step % 4 === 3);
+      bass(t0, bassline[step % bassline.length]);
+      step++;
+      beatTimer = setTimeout(tick, stepDur * 1000);
+    };
+    tick();
+  } catch (e) { /* audio optional */ }
+}
+function stopBeat() {
+  if (beatTimer) clearTimeout(beatTimer);
+  beatTimer = null;
+  if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
+}
+
+function startSession(t) {
+  shuffleOrder();
+  sessionStart = t;
+  move0 = t;
+  sessionActive = true;
+  smoothPose = null;
+  startBeat();
+}
+function endSession() {
+  sessionActive = false;
+  stopBeat();
+}
+
 const MOVE_TIME = 5.0;   // seconds each move is shown
 const BLEND = 1.2;       // seconds to smoothly cross into the next move
 
@@ -1492,7 +1584,8 @@ function currentMovePose(t) {
   if (move0 === null) move0 = t;
   const elapsed = t - move0;
   if (elapsed >= MOVE_TIME) {
-    moveIdx = (moveIdx + 1) % DANCE_MOVES.length;
+    orderPos = (orderPos + 1) % moveOrder.length;
+    moveIdx = moveOrder[orderPos];
     move0 = t;
   }
   let pose;
@@ -1501,7 +1594,8 @@ function currentMovePose(t) {
   if (e2 > MOVE_TIME - BLEND) {
     let f = (e2 - (MOVE_TIME - BLEND)) / BLEND;
     f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
-    const nxt = DANCE_MOVES[(moveIdx + 1) % DANCE_MOVES.length].fn(t);
+    const nextIdx = moveOrder[(orderPos + 1) % moveOrder.length];
+    const nxt = DANCE_MOVES[nextIdx].fn(t);
     pose = lerpPose(cur, nxt, f);
   } else {
     pose = cur;
@@ -1678,19 +1772,60 @@ async function renderLoop() {
   let camRect    = { x: w/2, y: 0, w: w/2, h };
   const landscape = true;
 
-  // --- Target panel: clean background + crimson pose figure to copy ---
+  // --- Target panel: clean background ---
   ctx.save();
   ctx.fillStyle = '#12140f';
   ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
   ctx.restore();
-  const movePose = currentMovePose(now);
-  drawStickLine(movePose, targetRect, { mirror:false, width:4, color:'rgba(226,34,54,0.95)', headR:16, sc:1.1, spreadY:1.3 });
-  // move name label
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.font = '600 14px -apple-system, sans-serif';
-  ctx.fillText(currentMoveName(), targetRect.x + 12, targetRect.y + targetRect.h - 20);
-  ctx.restore();
+
+  if (!sessionActive) {
+    // Idle: prompt to start a new dance session
+    ctx.save();
+    ctx.textAlign = 'center';
+    const icx = targetRect.x + targetRect.w/2, icy = targetRect.y + targetRect.h/2;
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.font = '700 26px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('Tap to Dance', icx, icy - 16);
+    ctx.fillStyle = 'rgba(255,210,120,0.95)';
+    ctx.font = '500 18px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText('Tippen zum Tanzen', icx, icy + 14);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '500 14px -apple-system, sans-serif';
+    ctx.fillText('1 minute · random moves · with beat', icx, icy + 46);
+    ctx.restore();
+  } else {
+    // Active session: check time
+    const remain = SESSION_LENGTH - (now - sessionStart);
+    if (remain <= 0) {
+      endSession();
+    } else {
+      const movePose = currentMovePose(now);
+      drawStickLine(movePose, targetRect, { mirror:false, width:4, color:'rgba(226,34,54,0.95)', headR:16, sc:1.1, spreadY:1.3 });
+      // countdown top-right of target panel
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.fillStyle = remain < 10 ? 'rgba(255,120,120,0.95)' : 'rgba(255,255,255,0.8)';
+      ctx.font = '700 22px -apple-system, sans-serif';
+      ctx.fillText(Math.ceil(remain) + 's', targetRect.x + targetRect.w - 16, targetRect.y + 46);
+      ctx.restore();
+      // guidance text: top center of the left panel, English + German
+      ctx.save();
+      ctx.textAlign = 'center';
+      const gcx = targetRect.x + targetRect.w/2;
+      const gy = targetRect.y + 42;
+      const mv = DANCE_MOVES[moveIdx];
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      const bw2 = Math.min(targetRect.w - 24, 560);
+      ctx.fillRect(gcx - bw2/2, gy - 26, bw2, 64);
+      ctx.fillStyle = 'rgba(255,255,255,0.96)';
+      ctx.font = '600 19px -apple-system, "Segoe UI", sans-serif';
+      ctx.fillText(mv.name, gcx, gy);
+      ctx.fillStyle = 'rgba(255,210,120,0.95)';
+      ctx.font = '500 16px -apple-system, "Segoe UI", sans-serif';
+      ctx.fillText(mv.de || '', gcx, gy + 26);
+      ctx.restore();
+    }
+  }
 
   // --- Camera panel: (filtered) video + your green figure ---
   drawCameraToRect(camRect, faceFilterMode);
