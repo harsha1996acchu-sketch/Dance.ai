@@ -1395,80 +1395,251 @@ function poseFrom(res){
 }
 
 // 60 named moves mapped to the closest honest stick-figure motion.
+// Rich dance moves drawn from the project's 4-country dataset
+// (India, Iran, Turkey/Azerbaijan, China). Each keeps its real movement
+// name, a condensed instruction, and its cultural meaning — mapped to the
+// closest honest stick-figure motion primitive.
 const DANCE_MOVES = [
-  {name:'Shoulder & chest vibration', de:'Schulter- und Brustvibration', fn:t=>poseFrom(M.vibrate(t))},
-  {name:'Circular formation, upper-body rotation', de:'Kreisformation, Oberkörperrotation', fn:t=>poseFrom(M.headCircle(t,0.05))},
-  {name:'Head & torso circular motion', de:'Kopf- und Rumpfkreisbewegung', fn:t=>poseFrom(M.headCircle(t))},
-  {name:'Side head shake, trembling hands', de:'Kopfschütteln seitlich, zitternde Hände', fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.008,26)})},
-  {name:'Repetitive rhythmic movement', de:'Wiederholende rhythmische Bewegung', fn:t=>poseFrom(M.sway(t))},
-  {name:'Single-leg hip strike', de:'Hüftstoß auf einem Bein', fn:t=>poseFrom(M.hipStrike(t))},
-  {name:'Deep forward/backward torso arch', de:'Tiefe Rumpfbeuge vor und zurück', fn:t=>poseFrom(M.torsoArch(t))},
-  {name:'Continuous body vibration', de:'Anhaltende Körpervibration', fn:t=>poseFrom(M.vibrate(t,0.010,24))},
-  {name:'Body rocking (seated rhythm)', de:'Körperschaukeln (sitzender Rhythmus)', fn:t=>poseFrom({...M.sway(t,0.03),...M.torsoArch(t*0.6)})},
-  {name:'Forward-backward head movement', de:'Kopfbewegung vor und zurück', fn:t=>poseFrom(M.headNod(t))},
-  {name:'Repeated simple pattern', de:'Einfaches wiederholtes Muster', fn:t=>poseFrom(M.sway(t,0.04))},
-  {name:'Group rhythmic clapping', de:'Rhythmisches Klatschen in der Gruppe', fn:t=>poseFrom(M.clap(t))},
-  {name:'Circle movement, rhythmic response', de:'Kreisbewegung mit rhythmischer Antwort', fn:t=>poseFrom({...M.sway(t),...M.headCircle(t,0.03)})},
-  {name:'Wide semicircle, shoulder to shoulder', de:'Breiter Halbkreis, Schulter an Schulter', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Synchronized clapping', de:'Synchrones Klatschen', fn:t=>poseFrom(M.clap(t,5))},
-  {name:'Leaping, stomping & clapping', de:'Springen, Stampfen und Klatschen', fn:t=>poseFrom({...M.stomp(t),...M.clap(t,4)})},
-  {name:"Circling to leader's voice", de:"Kreisen zur Stimme des Anführers", fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t*0.5)})},
-  {name:'Hand on shoulder, moving cane', de:'Hand auf Schulter, Stock bewegen', fn:t=>poseFrom(M.oneArmUp(t))},
-  {name:'Balanced sword line', de:'Balancierte Schwertlinie', fn:t=>poseFrom(M.armsOpen(t*0.5))},
-  {name:'Swinging sword overhead', de:'Schwert über dem Kopf schwingen', fn:t=>poseFrom(M.overhead(t))},
-  {name:'Chest & shoulder vibration', de:'Brust- und Schultervibration', fn:t=>poseFrom(M.vibrate(t,0.014,20))},
-  {name:'Wooden stick defensive stance', de:'Verteidigungshaltung mit Holzstab', fn:t=>poseFrom(M.pullChest(t*0.6))},
-  {name:'Circling opponent, seeking pole', de:'Gegner umkreisen, Stange suchen', fn:t=>poseFrom({...M.sway(t,0.06),...M.headShake(t)})},
-  {name:'Scarves while bending legs', de:'Tücher mit gebeugten Beinen', fn:t=>poseFrom({...M.kneeBend(t),...M.wave(t)})},
-  {name:'Facing dancer, waving scarves', de:'Tänzer gegenüber, Tücher schwenken', fn:t=>poseFrom(M.wave(t))},
-  {name:'Circular movement, colored scarves', de:'Kreisbewegung mit bunten Tüchern', fn:t=>poseFrom({...M.headCircle(t,0.03),...M.wave(t)})},
-  {name:'Clapping while seated', de:'Klatschen im Sitzen', fn:t=>poseFrom(M.clap(t))},
-  {name:'Pulling arms against resistance', de:'Arme gegen Widerstand ziehen', fn:t=>poseFrom(M.pullChest(t))},
-  {name:'Arm circles, weight side-to-side', de:'Armkreise, Gewicht seitlich verlagern', fn:t=>poseFrom({...M.armCircles(t),__shift:Math.sin(t*2)*0.05})},
-  {name:'Arms drawn to chest', de:'Arme zur Brust ziehen', fn:t=>poseFrom(M.pullChest(t))},
-  {name:'Step forward, arms up', de:'Schritt vor, Arme hoch', fn:t=>poseFrom(M.reach(t))},
-  {name:'Body tension & release', de:'Körperspannung und Lösen', fn:t=>poseFrom({...M.vibrate(t,0.006,16),...M.torsoArch(t*0.5)})},
-  {name:'Silk scarf over face, upright', de:'Seidentuch vorm Gesicht, aufrecht', fn:t=>poseFrom(M.still(t))},
-  {name:'Kneeling, rotating torso', de:'Kniend, Rumpf drehen', fn:t=>poseFrom({...M.kneeBend(t),...M.twist(t)})},
-  {name:'Arms crossed over chest', de:'Arme vor der Brust gekreuzt', fn:t=>poseFrom({left_wrist:{x:CXX+0.04,y:SHY+0.06},right_wrist:{x:CXX-0.04,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.08},right_elbow:{x:CXX+0.12,y:SHY+0.08}})},
-  {name:'Slow controlled weight shifting', de:'Langsame kontrollierte Gewichtsverlagerung', fn:t=>poseFrom(M.sway(t,0.06))},
-  {name:'Broad open posture', de:'Breite offene Haltung', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Paused stillness', de:'Innehaltende Stille', fn:t=>poseFrom(M.still(t))},
-  {name:'Kneeling, chest lifted, arms out', de:'Kniend, Brust gehoben, Arme offen', fn:t=>poseFrom({...M.kneeBend(t*0.5),...M.armsOpen(t*0.5)})},
-  {name:'Gradual body rotation', de:'Allmähliche Körperdrehung', fn:t=>poseFrom(M.spin(t,1.2))},
-  {name:'Step forward, measured', de:'Gemessener Schritt nach vorn', fn:t=>poseFrom(M.reach(t*0.6))},
-  {name:'Weight shift, stable upper body', de:'Gewichtsverlagerung, stabiler Oberkörper', fn:t=>poseFrom(M.sway(t,0.05))},
-  {name:'Open arms, chest to sky', de:'Offene Arme, Brust zum Himmel', fn:t=>poseFrom(M.armsOpen(t))},
-  {name:'Complete stillness', de:'Vollkommene Stille', fn:t=>poseFrom(M.still(t))},
-  {name:'Turning, controlled footwork', de:'Drehung mit kontrollierter Fußarbeit', fn:t=>poseFrom(M.spin(t,2))},
-  {name:'Deep knee bending', de:'Tiefe Kniebeuge', fn:t=>poseFrom(M.kneeBend(t))},
-  {name:'Grounded strong legs', de:'Geerdete starke Beine', fn:t=>poseFrom(M.kneeBend(t*0.5))},
-  {name:'Calm controlled gestures', de:'Ruhige kontrollierte Gesten', fn:t=>poseFrom(M.armCircles(t*0.5))},
-  {name:'Slow deliberate movement', de:'Langsame bewusste Bewegung', fn:t=>poseFrom(M.sway(t,0.04))},
-  {name:'Upright, open arms', de:'Aufrecht mit offenen Armen', fn:t=>poseFrom(M.armsOpen(t*0.6))},
-  {name:'Upright, head inclined', de:'Aufrecht, Kopf geneigt', fn:t=>poseFrom({...M.still(t),nose:{x:CXX+0.03,y:0.29}})},
-  {name:'Single-foot pivot, arms extended', de:'Drehung auf einem Fuß, Arme gestreckt', fn:t=>poseFrom(M.spin(t,2.5))},
-  {name:'Rapid spinning on one foot', de:'Schnelles Drehen auf einem Fuß', fn:t=>poseFrom(M.spin(t,6))},
-  {name:'Twisting waist & hips', de:'Taille und Hüften drehen', fn:t=>poseFrom(M.twist(t))},
-  {name:'Cross-step, fwd/back footwork', de:'Kreuzschritt, Fußarbeit vor/zurück', fn:t=>poseFrom(M.stomp(t*0.8))},
-  {name:'Upper body follows hip rhythm', de:'Oberkörper folgt Hüftrhythmus', fn:t=>poseFrom({...M.twist(t),...M.armCircles(t)})},
-  {name:'Drumming, alternating strikes', de:'Trommeln mit wechselnden Schlägen', fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06}})},
-  {name:'Gentle sway, small waist twist', de:'Sanftes Wiegen, kleine Taillendrehung', fn:t=>poseFrom({...M.sway(t,0.03),...M.twist(t*0.5)})},
-  {name:'Lifting & lowering implements', de:'Heben und Senken von Geräten', fn:t=>poseFrom(M.overhead(t*0.5))},
-  {name:'Exaggerated stomp, wide swings', de:'Kräftiges Stampfen, weite Schwünge', fn:t=>poseFrom(M.stomp(t))},
-  {name:'Knee bend, rhythmic body', de:'Kniebeuge mit rhythmischem Körper', fn:t=>poseFrom({...M.kneeBend(t),...M.vibrate(t,0.006,18)})},
-  {name:'Peacock-like posture', de:'Pfauenartige Haltung', fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10},right_wrist:{x:CXX+0.26,y:SHY-0.10},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04}})},
+  // ---------------- INDIA ----------------
+  {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
+   text:'Spin with arms out, eyes fixed on one point.',
+   meaning:'Dissolving the self; devotion that never loses sight of the divine.',
+   fn:t=>poseFrom(M.spin(t,4))},
+  {dance:'Kathak · North India', name:'Tatkar — Conversation of Feet',
+   text:'Speak with your feet: heel, ball, heel — upper body calm.',
+   meaning:'A living dialogue with Tala, the cosmic pulse.',
+   fn:t=>poseFrom(M.stomp(t*1.4))},
+  {dance:'Kathak · North India', name:'Amad — The Arrival',
+   text:'Step with intention, chest open, then sweep arms wide.',
+   meaning:'Ordinary space becomes ritual space.',
+   fn:t=>poseFrom(M.reach(t*0.7))},
+  {dance:'Kathak · North India', name:'Tihaii — The Triple Landing',
+   text:'Repeat a phrase three times, land exactly on beat one, freeze.',
+   meaning:'Three forces completing one cosmic cycle.',
+   fn:t=>poseFrom(M.clap(t,3))},
+  {dance:'Odissi · Odisha', name:'Tribhanga — The Triple Bend',
+   text:'Hip out, torso counter-curves, head tilts — a flowing S.',
+   meaning:'The posture of Krishna: beauty, love, divine grace.',
+   fn:t=>poseFrom({...M.twist(t*0.5),nose:{x:CXX+0.04*Math.sin(t*0.8),y:0.28}})},
+  {dance:'Odissi · Odisha', name:'Chauka — The Square',
+   text:'Feet wide, knees deep, spine vertical — a grounded square.',
+   meaning:'The immovable masculine principle; the body as mandala.',
+   fn:t=>poseFrom(M.kneeBend(t*0.5))},
+  {dance:'Odissi · Odisha', name:'Chali — The Sacred Walk',
+   text:'Walk with a gentle continuous hip sway, arms in slow arcs.',
+   meaning:'Walking made conscious, made devotional.',
+   fn:t=>poseFrom({...M.sway(t,0.05),...M.armCircles(t*0.5)})},
+  {dance:'Manipuri · Manipur', name:'The Floating Step',
+   text:'Steps like setting feet on still water — head level, no bounce.',
+   meaning:'The earth is sacred; carry as little ego-weight as possible.',
+   fn:t=>poseFrom(M.sway(t*0.7,0.04))},
+  {dance:'Manipuri · Manipur', name:'The Circular Flow',
+   text:'Turn slowly like the earth rotating, a wave through the arms.',
+   meaning:'Time is circular; every ending contains a beginning.',
+   fn:t=>poseFrom({...M.spin(t,0.8),...M.armCircles(t*0.6)})},
+  {dance:'Manipuri · Manipur', name:'Hands Like Water',
+   text:'Fingers curl and open in exchange, wrists free, like the tide.',
+   meaning:'The hands are not stating — they are singing nature.',
+   fn:t=>poseFrom(M.armCircles(t*0.8))},
+  {dance:'Chhau · East India', name:'The Warrior Leap',
+   text:'Coil low, explode upward, arms wide — land in silence.',
+   meaning:'Divine fury exceeding what ordinary bodies can do.',
+   fn:t=>poseFrom(M.stomp(t*1.2))},
+  {dance:'Chhau · East India', name:'The Demon Walk',
+   text:'Be enormous: slow, heavy steps, eyes above the crowd.',
+   meaning:'Tamas — the necessary weight and darkness of the cosmos.',
+   fn:t=>poseFrom(M.shift(t,0.07,0.7))},
+  {dance:'Garba · Gujarat', name:'The Circle Walk',
+   text:'Walk counterclockwise around the sacred center.',
+   meaning:'Every dancer becomes a planet orbiting the divine.',
+   fn:t=>poseFrom(M.sway(t,0.06))},
+  {dance:'Garba · Gujarat', name:'Teen Taali — Three Claps',
+   text:'Clap above, at heart, at waist — the body as percussion.',
+   meaning:'Three claps for three aspects of the goddess.',
+   fn:t=>poseFrom(M.clap(t,4))},
+  {dance:'Garba · Gujarat', name:'Dandiya Ras — Stick Strike',
+   text:'Strike right, strike left, strike above — every hit rings.',
+   meaning:'Re-sounding the cosmic battle of goddess and demon.',
+   fn:t=>poseFrom(M.clap(t,6))},
+  {dance:'Bhangra · Punjab', name:'The Shoulder Roll',
+   text:'Roll shoulders in big opposing circles, knees bouncing.',
+   meaning:'Farm labour transformed into gratitude and joy.',
+   fn:t=>poseFrom(M.vibrate(t,0.014,8))},
+  {dance:'Bhangra · Punjab', name:'The Bhangra Jump',
+   text:'Deep bend — then jump, arms rising, land soft and go again.',
+   meaning:'A whole season of worry released upward in one moment.',
+   fn:t=>poseFrom(M.stomp(t*1.3))},
+  {dance:'Bhangra · Punjab', name:'Kato — The Waist Bend',
+   text:'Arms overhead, bend deep right, then deep left, with momentum.',
+   meaning:'Chardikala: optimism that refuses defeat.',
+   fn:t=>poseFrom({...M.twist(t*0.8),...M.overhead(t*0.8)})},
+  {dance:'Bhangra · Punjab', name:'Dhamaal — Full Release',
+   text:'Everything at once — shoulders, knees, arms, head. Hold nothing.',
+   meaning:'The body at its most free is most connected to others.',
+   fn:t=>poseFrom({...M.vibrate(t,0.012,14),...M.stomp(t)})},
+  {dance:'Bihu · Assam', name:'The Flutter Hands',
+   text:'Wrists loose, hands flutter like new leaves in spring wind.',
+   meaning:'The human body waking with the land after winter.',
+   fn:t=>poseFrom(M.vibrate(t,0.010,18))},
+  {dance:'Bihu · Assam', name:'Dolobari — The Hip Sway',
+   text:'Full generous weight shifts hip to hip, arms exchanging.',
+   meaning:'Celebrating fertility and the continuation of life.',
+   fn:t=>poseFrom({...M.twist(t*0.9),__shift:Math.sin(t*1.8)*0.05})},
+  {dance:'Lavani · Maharashtra', name:'The Hip Stitch',
+   text:'Sharp isolated hip pops — upper body still, face composed.',
+   meaning:'Precise self-ownership that cannot be passively consumed.',
+   fn:t=>poseFrom(M.hipStrike(t))},
+  {dance:'Lavani · Maharashtra', name:'Abhangi — Devotional Stance',
+   text:'Weight on one leg, palms together at chest, eyes inward.',
+   meaning:'The sacred and the sensuous are the same aliveness.',
+   fn:t=>poseFrom(M.still(t))},
+
+  // ---------------- IRAN ----------------
+  {dance:'Bandari · Persian Gulf', name:'Fisherman Net Pull',
+   text:'Pull both arms back as if hauling a heavy rope from the sea.',
+   meaning:'The collective effort of fishermen made into dance.',
+   fn:t=>poseFrom(M.pullChest(t))},
+  {dance:'Bandari · Persian Gulf', name:'Shoulder & Chest Vibration',
+   text:'Continuous rhythmic shivers through shoulders and chest.',
+   meaning:'The energy of music shaped by cultures meeting at the ports.',
+   fn:t=>poseFrom(M.vibrate(t,0.013,20))},
+  {dance:'Bandari · Persian Gulf', name:'Hair & Torso Waves',
+   text:'Swing head in circles while the torso lifts and falls.',
+   meaning:'The body amplified like waves rising on the sea.',
+   fn:t=>poseFrom({...M.headCircle(t,0.05),...M.torsoArch(t*0.8)})},
+  {dance:'Zār ritual · Southern Iran', name:'The Healing Shake',
+   text:'Shake the head side to side, hands trembling, body pushing fwd/back.',
+   meaning:'Driving the harmful wind out of the body.',
+   fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.008,24)})},
+  {dance:'Zār ritual · Southern Iran', name:'Trance Repetition',
+   text:'Repeat one simple pattern as the rhythm slowly accelerates.',
+   meaning:'Repetition until exhaustion and ecstasy are one.',
+   fn:t=>poseFrom(M.sway(t*(1+t*0.01),0.05))},
+  {dance:'Bandari · Persian Gulf', name:'Hip Dialogue',
+   text:'Weight on one leg, striking the hip rhythmically with the other side.',
+   meaning:'A constant dialogue between balance and movement.',
+   fn:t=>poseFrom(M.hipStrike(t))},
+  {dance:'Bandari · Persian Gulf', name:'The Deep Arch',
+   text:'Bend forward toward the ground, then arch dramatically back.',
+   meaning:'Strength, endurance, mastery over the body.',
+   fn:t=>poseFrom(M.torsoArch(t*0.7))},
+  {dance:'Rezif · Persian Gulf', name:'Shoulder Line',
+   text:'Hand on your neighbour\'s shoulder, stepping forward and back as one.',
+   meaning:'The group becomes a single synchronized body.',
+   fn:t=>poseFrom({...M.oneArmUp(t*0.6),...M.sway(t,0.04)})},
+  {dance:'Sword dance · Persian Gulf', name:'Sword Overhead',
+   text:'Swing the blade above the head to the rhythm of drums.',
+   meaning:'Tools of conflict become a performance of honor.',
+   fn:t=>poseFrom(M.overhead(t))},
+  {dance:'Choub-Bazi · Lur tradition', name:'The Stick Guard',
+   text:'Hold a defensive stance, circling, watching for an opening.',
+   meaning:'Combat skill turned into agility, timing, intelligence.',
+   fn:t=>poseFrom({...M.pullChest(t*0.5),__shift:Math.sin(t*0.9)*0.05})},
+  {dance:'Handkerchief dance · Iran', name:'Scarves & Bent Knees',
+   text:'Scarves above the head sweeping side to side, legs bending in turn.',
+   meaning:'Movement made visible through color and flowing cloth.',
+   fn:t=>poseFrom({...M.wave(t),...M.kneeBend(t*0.7)})},
+  {dance:'Rowing dance · Persian Gulf', name:'The Oar Circles',
+   text:'Broad alternating arm circles, weight shifting side to side.',
+   meaning:'The repetitive motion of rowing across open water.',
+   fn:t=>poseFrom({...M.armCircles(t),__shift:Math.sin(t*2)*0.05})},
+
+  // ---------------- TURKEY & AZERBAIJAN ----------------
+  {dance:'Zeybek · Aegean Anatolia', name:'The Proud Stand',
+   text:'Chest lifted, head high, gaze fixed on the horizon.',
+   meaning:'Dignity, courage, unwavering self-confidence.',
+   fn:t=>poseFrom(M.still(t))},
+  {dance:'Zeybek · Aegean Anatolia', name:'Eagle Wings',
+   text:'Extend both arms wide like the wings of an eagle.',
+   meaning:'Freedom, protection, the warrior\'s powerful presence.',
+   fn:t=>poseFrom(M.armsOpen(t*0.7))},
+  {dance:'Zeybek · Aegean Anatolia', name:'Kneel and Rise',
+   text:'Lower to one knee, chest lifted — then rise without breaking posture.',
+   meaning:'Humility, then determination that overcomes hardship.',
+   fn:t=>poseFrom(M.kneeBend(t*0.6))},
+  {dance:'Zeybek · Aegean Anatolia', name:'The Slow Claim',
+   text:'Rotate gradually with wide arms and steady footing.',
+   meaning:'Claiming the surrounding space with confidence.',
+   fn:t=>poseFrom({...M.spin(t,1),...M.armsOpen(t*0.5)})},
+  {dance:'Sema · Mevlevi Türkiye', name:'Arms Crossed — The Beginning',
+   text:'Head inclined, arms crossed over the chest.',
+   meaning:'The unity of God; the journey\'s spiritual beginning.',
+   fn:t=>poseFrom({left_wrist:{x:CXX+0.04,y:SHY+0.06},right_wrist:{x:CXX-0.04,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.08},right_elbow:{x:CXX+0.12,y:SHY+0.08},nose:{x:CXX,y:0.29}})},
+  {dance:'Sema · Mevlevi Türkiye', name:'The Whirling',
+   text:'Turn continuously around your own axis, right palm up, left palm down.',
+   meaning:'Receiving divine grace and passing it to the world.',
+   fn:t=>poseFrom({...M.spin(t,1.6),right_wrist:{x:CXX+0.14,y:SHY-0.18},left_wrist:{x:CXX-0.14,y:SHY+0.16}})},
+  {dance:'Azerbaijani dance', name:'On the Toes',
+   text:'Rise tall on the tips of the toes, body stretched upward.',
+   meaning:'Taller, lighter, faster — the proud elevated body.',
+   fn:t=>poseFrom(M.reach(t*0.8))},
+  {dance:'Azerbaijani dance', name:'The Statue Freeze',
+   text:'Circle slowly with expressive hands — then freeze when the music stops.',
+   meaning:'The human body becomes humor and sculpture.',
+   fn:t=>{const c=(t%3)<2.2;return c?poseFrom(M.armCircles(t*0.7)):poseFrom(M.still(0));}},
+  {dance:'Azerbaijani dance', name:'Elder\'s Dignity',
+   text:'Calm, mature, controlled gestures — never rushing.',
+   meaning:'Dignity and beauty do not belong only to the young.',
+   fn:t=>poseFrom(M.armCircles(t*0.4))},
+
+  // ---------------- CHINA ----------------
+  {dance:'Court dance · China', name:'Immortal\'s Pivot',
+   text:'A weightless single-foot pivot turn, posture lifted, sleeves flaring.',
+   meaning:'Depicting how the immortals live in the heavens.',
+   fn:t=>poseFrom(M.spin(t,2.2))},
+  {dance:'Hu Xuan · Western Regions', name:'Spinning on the Mat',
+   text:'Rapid continuous spinning on one foot, arms high, skirt flaring.',
+   meaning:'Splendid amusement for the imperial banquet.',
+   fn:t=>poseFrom(M.spin(t,6))},
+  {dance:'Errenzhuan · Northeast China', name:'Handkerchief & Fan',
+   text:'Hips twist with the drum, wrists spin the handkerchief and flip the fan.',
+   meaning:'Celebrating and praying for the harvest.',
+   fn:t=>poseFrom({...M.twist(t),...M.armCircles(t*1.2)})},
+  {dance:'Flower Drum · China', name:'The Story Drum',
+   text:'Strike the drum and rim alternately while swaying and gliding.',
+   meaning:'Folk stories and the hardships of daily life, sung and drummed.',
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06}})},
+  {dance:'Yayue · Imperial ritual', name:'The Ritual Square',
+   text:'Step forward, back, and turn in perfect uniform slowness.',
+   meaning:'Hierarchical order; reverence for heaven, earth, ancestors.',
+   fn:t=>poseFrom(M.overhead(t*0.4))},
+  {dance:'Nuo · Exorcism dance', name:'Mask Stomp',
+   text:'Stomp heavily, swing arms wide in striking, driving gestures.',
+   meaning:'Driving away plague demons; praying for safety and harvest.',
+   fn:t=>poseFrom(M.stomp(t))},
+  {dance:'Dragon dance · China', name:'The Dragon Body',
+   text:'Rise and fall in sync, spiraling forward as one long body.',
+   meaning:'Favorable weather, national peace, collective unity.',
+   fn:t=>poseFrom({...M.sway(t,0.07),...M.torsoArch(t*0.6)})},
+  {dance:'Lion dance · Southern China', name:'The Lion Pounce',
+   text:'Horse stance — leap, dodge, turn and pounce like the lion.',
+   meaning:'Driving away evil, attracting fortune and prosperity.',
+   fn:t=>poseFrom({...M.kneeBend(t*1.2),...M.stomp(t*0.9)})},
+  {dance:'Waist drum · Loess Plateau', name:'Ansai Drummers',
+   text:'Leap, kick and twist while striking the waist drum, ribbons flying.',
+   meaning:'The bold vitality of the plateau people.',
+   fn:t=>poseFrom({...M.stomp(t*1.1),...M.vibrate(t,0.008,12)})},
+  {dance:'Peacock dance · Dai people', name:'The Peacock',
+   text:'Three-bend posture, wavelike arms, tiny light steps.',
+   meaning:'Good fortune, happiness, reverence for nature.',
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10+Math.sin(t*2)*0.04},right_wrist:{x:CXX+0.26,y:SHY-0.10-Math.sin(t*2)*0.04},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04}})},
+  {dance:'Bonfire circle · China', name:'Around the Fire',
+   text:'Hands joined in a circle, stomping counterclockwise, singing.',
+   meaning:'Harvest, social joy, the village\'s peace and prosperity.',
+   fn:t=>poseFrom({...M.sway(t,0.06),...M.kneeBend(t*0.8)})},
+  {dance:'Tea-picking dance · China', name:'Mincing Tea Steps',
+   text:'Light tiny steps, bending to pluck leaves, chasing butterflies.',
+   meaning:'The vivid tea-harvest life of mountain villages.',
+   fn:t=>poseFrom({...M.sway(t*1.3,0.03),...M.armCircles(t*0.9)})},
 ];
 
 let moveIdx = 0, move0 = null;
 
 // ---- Session system: 1-minute dance per participant ----
-// Each session shuffles the move order (different every time), plays an
-// upbeat synthesized beat, runs 60s, then returns to the start screen.
 let moveOrder = DANCE_MOVES.map((_, i) => i);
 let orderPos = 0;
 let sessionStart = null;
-const SESSION_LENGTH = 60; // seconds per participant
+const SESSION_LENGTH = 60;
 let sessionActive = false;
 
 function shuffleOrder() {
@@ -1486,7 +1657,7 @@ let audioCtx = null, beatTimer = null;
 function startBeat() {
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const bpm = 118, stepDur = 60 / bpm / 2; // 8th notes
+    const bpm = 118, stepDur = 60 / bpm / 2;
     let step = 0;
     const kick = (time) => {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -1548,24 +1719,21 @@ function endSession() {
   stopBeat();
 }
 
-const MOVE_TIME = 5.0;   // seconds each move is shown
-const BLEND = 1.2;       // seconds to smoothly cross into the next move
+const MOVE_TIME = 5.0;
+const BLEND = 1.2;
 
 // --- Wandering: the dancer travels around the panel while performing ---
-// Smooth pseudo-random path using layered sines (never leaves the panel).
 function wanderOffset(t) {
   const wx = Math.sin(t*0.35) * 0.16 + Math.sin(t*0.13+2.1) * 0.09;
   const wy = Math.sin(t*0.22+1.0) * 0.05 + Math.sin(t*0.09+0.4) * 0.03;
-  // gentle walking bob synced to horizontal travel speed
   const speed = Math.abs(Math.cos(t*0.35)*0.16*0.35 + Math.cos(t*0.13+2.1)*0.09*0.13);
   const bob = Math.abs(Math.sin(t*3.2)) * Math.min(0.012, speed*0.5);
   return { x: wx, y: wy + bob };
 }
 
-// --- Inertia smoothing: joints follow targets with momentum, like a body
-// with weight, removing any mechanical snap from the raw math motion. ---
+// --- Inertia smoothing for lifelike weight ---
 let smoothPose = null;
-const SMOOTH = 0.16; // lower = heavier/smoother, higher = snappier
+const SMOOTH = 0.16;
 function smoothToward(target) {
   if (!smoothPose) {
     smoothPose = {};
@@ -1600,14 +1768,12 @@ function currentMovePose(t) {
   } else {
     pose = cur;
   }
-  // apply wandering travel across the panel
   const wo = wanderOffset(t);
   const moved = {};
   for (const k in pose) moved[k] = { x: pose[k].x + wo.x, y: pose[k].y + wo.y };
-  // apply inertia smoothing for lifelike weight
   return smoothToward(moved);
 }
-function currentMoveName() { return (moveIdx+1)+'/'+DANCE_MOVES.length+'  '+DANCE_MOVES[moveIdx].name; }
+function currentMoveName() { return DANCE_MOVES[moveIdx].name; }
 
 // Stick-LINE figure matching the yellow sketch: a single spine line, with
 // arms and legs branching off — NO torso rectangle. Bendable, elegant.
@@ -1808,21 +1974,48 @@ async function renderLoop() {
       ctx.font = '700 22px -apple-system, sans-serif';
       ctx.fillText(Math.ceil(remain) + 's', targetRect.x + targetRect.w - 16, targetRect.y + 46);
       ctx.restore();
-      // guidance text: top center of the left panel, English + German
+      // guidance: movement name, dance origin, instruction, meaning
       ctx.save();
       ctx.textAlign = 'center';
       const gcx = targetRect.x + targetRect.w/2;
-      const gy = targetRect.y + 42;
+      const gy = targetRect.y + 40;
       const mv = DANCE_MOVES[moveIdx];
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      const bw2 = Math.min(targetRect.w - 24, 560);
-      ctx.fillRect(gcx - bw2/2, gy - 26, bw2, 64);
-      ctx.fillStyle = 'rgba(255,255,255,0.96)';
-      ctx.font = '600 19px -apple-system, "Segoe UI", sans-serif';
-      ctx.fillText(mv.name, gcx, gy);
+      const wrap = (text, maxW, font) => {
+        ctx.font = font;
+        const words = (text||'').split(' ');
+        const lines = []; let line = '';
+        for (const wd of words) {
+          const test = line ? line + ' ' + wd : wd;
+          if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        return lines;
+      };
+      const maxW = Math.min(targetRect.w - 48, 620);
+      const fName = '700 20px -apple-system, "Segoe UI", sans-serif';
+      const fDance = '600 12px -apple-system, sans-serif';
+      const fText = '500 14px -apple-system, sans-serif';
+      const fMean = 'italic 500 13px -apple-system, sans-serif';
+      const nameLines = wrap(mv.name, maxW, fName);
+      const textLines = wrap(mv.text, maxW, fText);
+      const meanLines = wrap(mv.meaning, maxW, fMean);
+      const totalH = 22 + nameLines.length*24 + 18 + textLines.length*19 + meanLines.length*18 + 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(gcx - maxW/2 - 14, gy - 24, maxW + 28, totalH);
+      let ty = gy;
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.font = fName;
+      for (const L of nameLines) { ctx.fillText(L, gcx, ty); ty += 24; }
+      ctx.fillStyle = 'rgba(140,220,255,0.9)';
+      ctx.font = fDance;
+      ctx.fillText(mv.dance, gcx, ty); ty += 22;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = fText;
+      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 19; }
       ctx.fillStyle = 'rgba(255,210,120,0.95)';
-      ctx.font = '500 16px -apple-system, "Segoe UI", sans-serif';
-      ctx.fillText(mv.de || '', gcx, gy + 26);
+      ctx.font = fMean;
+      for (const L of meanLines) { ctx.fillText(L, gcx, ty); ty += 18; }
       ctx.restore();
     }
   }
