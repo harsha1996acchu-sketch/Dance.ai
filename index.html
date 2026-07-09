@@ -1027,6 +1027,176 @@ const EASY_POSES = ['armsUp','armsOutT','leftUp','rightUp','handsHips','oneKneeU
 let poseCur = null, poseNext = null, pose0 = null;
 const P_HOLD = 1.2, P_MORPH = 0.8;
 function randomEasyPose() { return POSES[ EASY_POSES[(Math.random()*EASY_POSES.length)|0] ](); }
+// Green tracking line: a single smooth line through 3 body points —
+// top = right hand (wrist), middle = hip, bottom = left leg (ankle).
+// This mirrors the concept that the line's top/middle/bottom map to
+// specific body parts, so the participant matches the red pose line.
+function drawTrackingLine(joints, rect, opts) {
+  const px = (nx) => rect.x + (1 - nx) * rect.w; // mirrored
+  const py = (ny) => rect.y + ny * rect.h;
+
+  const rw = joints.right_wrist;                 // top = right hand
+  const lh = joints.left_hip, rh = joints.right_hip;
+  const hip = (lh && rh) ? { x:(lh.x+rh.x)/2, y:(lh.y+rh.y)/2 } : (lh || rh); // middle = hip
+  const la = joints.left_ankle;                  // bottom = left leg
+
+  const pts = [];
+  if (rw)  pts.push({ x: px(rw.x),  y: py(rw.y)  });
+  if (hip) pts.push({ x: px(hip.x), y: py(hip.y) });
+  if (la)  pts.push({ x: px(la.x),  y: py(la.y)  });
+  if (pts.length < 2) return;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  const build = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 3) {
+      // smooth curve: quadratic through the middle (hip) point
+      ctx.quadraticCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
+    } else {
+      ctx.lineTo(pts[1].x, pts[1].y);
+    }
+  };
+  build(); ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
+  build(); ctx.lineWidth = 6;  ctx.strokeStyle = 'rgba(70,235,130,0.95)'; ctx.stroke();
+
+  // end labels so the mapping is clear
+  const dot = (p, label, col) => {
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.fillText(label, p.x + 10, p.y + 4);
+  };
+  if (rw)  dot(pts[0], 'R hand', 'rgba(120,255,170,0.95)');
+  if (la)  dot(pts[pts.length-1], 'L leg', 'rgba(120,255,170,0.95)');
+  ctx.restore();
+}
+
+// ---- Self-drawing dance gesture line ----
+// A single flowing curved line that the "AI" draws stroke by stroke (ink
+// flowing on), completes, holds briefly, then clears and draws the next —
+// like the reference ribbon-curve dance drawings. Not morphing: drawing.
+const DANCE_CURVES = [
+  [[0.30,0.82],[0.40,0.55],[0.36,0.34],[0.52,0.22],[0.66,0.30],[0.60,0.16]], // upward reach curve
+  [[0.34,0.20],[0.46,0.36],[0.40,0.54],[0.58,0.60],[0.50,0.78],[0.64,0.88]], // S descend
+  [[0.62,0.18],[0.50,0.30],[0.58,0.46],[0.42,0.54],[0.52,0.72],[0.40,0.88]], // reverse S
+  [[0.30,0.30],[0.48,0.26],[0.60,0.40],[0.50,0.58],[0.62,0.72],[0.44,0.86]], // question sweep
+  [[0.34,0.86],[0.46,0.64],[0.40,0.44],[0.56,0.36],[0.50,0.22],[0.66,0.16]], // rising flourish
+  [[0.40,0.16],[0.56,0.24],[0.48,0.42],[0.62,0.52],[0.44,0.66],[0.58,0.86]], // zig-flow
+];
+const clampC = (v) => Math.max(0.06, Math.min(0.94, v));
+function randomCurve() {
+  const base = DANCE_CURVES[(Math.random()*DANCE_CURVES.length)|0];
+  return base.map(p => [ clampC(p[0] + (Math.random()*2-1)*0.03),
+                         clampC(p[1] + (Math.random()*2-1)*0.03) ]);
+}
+
+let curCurve = randomCurve();
+let curveT0 = null;
+const DRAW_TIME = 1.6;  // seconds to draw the line
+const HOLD_TIME = 3.0;  // hold the completed shape for 3s
+const FADE_TIME = 0.5;  // fade out before next
+
+// Catmull-Rom -> bezier smoothing, drawing only up to `progress` (0..1)
+function drawCurveProgressive(curve, rect, progress, alpha) {
+  const pts = curve.map(p => ({ x: rect.x + p[0]*rect.w, y: rect.y + p[1]*rect.h }));
+  const N = pts.length;
+  const totalSegs = N - 1;
+  const drawSegs = progress * totalSegs;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  const build = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < totalSegs; i++) {
+      const segFrac = Math.min(1, Math.max(0, drawSegs - i));
+      if (segFrac <= 0) break;
+      const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+      const c1x = p1.x + (p2.x - p0.x)/6, c1y = p1.y + (p2.y - p0.y)/6;
+      const c2x = p2.x - (p3.x - p1.x)/6, c2y = p2.y - (p3.y - p1.y)/6;
+      if (segFrac >= 1) {
+        ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
+      } else {
+        // partial segment: subdivide the bezier up to segFrac
+        const t2 = segFrac;
+        const x = cubicAt(p1.x, c1x, c2x, p2.x, t2);
+        const y = cubicAt(p1.y, c1y, c2y, p2.y, t2);
+        ctx.bezierCurveTo(
+          p1.x + (c1x-p1.x)*t2, p1.y + (c1y-p1.y)*t2,
+          c1x + (c2x-c1x)*t2,  c1y + (c2y-c1y)*t2,
+          x, y);
+      }
+    }
+  };
+
+  build(); ctx.lineWidth = 16; ctx.strokeStyle = `rgba(0,0,0,${0.35*alpha})`; ctx.stroke();
+  build(); ctx.lineWidth = 10; ctx.strokeStyle = `rgba(255,255,255,${0.85*alpha})`; ctx.stroke();
+  build(); ctx.lineWidth = 5;  ctx.strokeStyle = `rgba(226,34,54,${0.95*alpha})`; ctx.stroke();
+
+  // glowing "pen tip" at the drawing head
+  if (progress < 1) {
+    const i = Math.min(totalSegs-1, Math.floor(drawSegs));
+    const segFrac = Math.min(1, Math.max(0, drawSegs - i));
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1] || p1, p3 = pts[i+2] || p2;
+    const c1x = p1.x + (p2.x - p0.x)/6, c1y = p1.y + (p2.y - p0.y)/6;
+    const c2x = p2.x - (p3.x - p1.x)/6, c2y = p2.y - (p3.y - p1.y)/6;
+    const hx = cubicAt(p1.x, c1x, c2x, p2.x, segFrac);
+    const hy = cubicAt(p1.y, c1y, c2y, p2.y, segFrac);
+    ctx.shadowColor = 'rgba(255,120,140,0.95)'; ctx.shadowBlur = 16;
+    ctx.fillStyle = 'rgba(255,220,225,0.98)';
+    ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+function cubicAt(a, b, c, d, t) {
+  const mt = 1 - t;
+  return mt*mt*mt*a + 3*mt*mt*t*b + 3*mt*t*t*c + t*t*t*d;
+}
+
+function labelCurveEnds(curve, rect, alpha) {
+  const top = curve[0], bot = curve[curve.length-1];
+  const tx = rect.x + top[0]*rect.w, ty = rect.y + top[1]*rect.h;
+  const bx = rect.x + bot[0]*rect.w, by = rect.y + bot[1]*rect.h;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(255,180,190,0.95)';
+  ctx.beginPath(); ctx.arc(tx, ty, 7, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = '600 11px -apple-system, sans-serif';
+  ctx.fillText('R hand', tx + 10, ty + 4);
+  ctx.fillText('L leg',  bx + 10, by + 4);
+  ctx.restore();
+}
+
+function drawDanceCurve(rect, t) {
+  if (curveT0 === null) curveT0 = t;
+  const e = t - curveT0;
+  const cycle = DRAW_TIME + HOLD_TIME + FADE_TIME;
+  if (e < DRAW_TIME) {
+    let p = e / DRAW_TIME;
+    p = p < 0.5 ? 2*p*p : 1 - Math.pow(-2*p+2, 2)/2; // ease the drawing speed
+    drawCurveProgressive(curCurve, rect, p, 1);
+  } else if (e < DRAW_TIME + HOLD_TIME) {
+    drawCurveProgressive(curCurve, rect, 1, 1);
+    labelCurveEnds(curCurve, rect, 1);
+  } else if (e < cycle) {
+    const fp = (e - DRAW_TIME - HOLD_TIME) / FADE_TIME;
+    drawCurveProgressive(curCurve, rect, 1, 1 - fp);
+    labelCurveEnds(curCurve, rect, 1 - fp);
+  } else {
+    curCurve = randomCurve();
+    curveT0 = t;
+  }
+}
+
 function currentTargetPose(t) {
   if (pose0 === null) { poseCur = randomEasyPose(); poseNext = randomEasyPose(); pose0 = t; }
   const e = t - pose0;
@@ -1335,8 +1505,7 @@ async function renderLoop() {
   ctx.fillStyle = '#12140f';
   ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
   ctx.restore();
-  const pose = currentDancePose(now);
-  drawStickLine(pose, targetRect, { mirror:false, width:3, color:'rgba(226,34,54,0.95)', headR:16, sc:1.05, spreadY:1.25 });
+  drawDanceCurve(targetRect, now);
 
   // --- Camera panel: (filtered) video + your green figure ---
   drawCameraToRect(camRect, faceFilterMode);
@@ -1345,7 +1514,7 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
-      drawStickLine(named, camRect, { mirror:true, width:4, color:'rgba(70,235,130,0.95)', headR:14, sc:1, spreadY:1 });
+      drawTrackingLine(named, camRect, {});
     }
   } catch (e) {
     // skip frame on transient error
