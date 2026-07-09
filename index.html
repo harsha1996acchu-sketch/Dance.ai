@@ -1343,6 +1343,129 @@ function drawFigureRect(joints, rect, opts) {
   ctx.restore();
 }
 
+// ---- Animated dance moves ----
+// Each move is a function(t) -> pose (joint map), producing real motion
+// (vibration, arcs, spins, shifts) rather than a static shape. Only moves
+// a single standing stick figure can honestly express are included; prop/
+// group/floor moves from the full list are omitted (a stick figure can't
+// show swords, scarves, circles, seated work, etc. without faking it).
+function bp(over) { return basePose(over); }
+
+const DANCE_MOVES = [
+  { name: 'Shoulder & chest vibration', fn: (t) => {
+      const v = Math.sin(t*22)*0.012;
+      return bp({ left_shoulder:{x:CXX-0.09+v,y:SHY}, right_shoulder:{x:CXX+0.09-v,y:SHY},
+        left_elbow:{x:CXX-0.15+v,y:SHY+0.10}, right_elbow:{x:CXX+0.15-v,y:SHY+0.10},
+        left_wrist:{x:CXX-0.17+v,y:SHY+0.20}, right_wrist:{x:CXX+0.17-v,y:SHY+0.20} }); } },
+
+  { name: 'Head & torso circular motion', fn: (t) => {
+      const cx=Math.cos(t*3)*0.04, cy=Math.sin(t*3)*0.03;
+      return bp({ nose:{x:CXX+cx,y:0.28+cy},
+        left_shoulder:{x:CXX-0.09+cx*0.5,y:SHY+cy*0.5}, right_shoulder:{x:CXX+0.09+cx*0.5,y:SHY+cy*0.5} }); } },
+
+  { name: 'Side head shake, trembling hands', fn: (t) => {
+      const hx=Math.sin(t*8)*0.04, tr=Math.sin(t*26)*0.01;
+      return bp({ nose:{x:CXX+hx,y:0.28},
+        left_wrist:{x:CXX-0.17+tr,y:SHY+0.20}, right_wrist:{x:CXX+0.17-tr,y:SHY+0.20} }); } },
+
+  { name: 'Single-leg hip strike', fn: (t) => {
+      const s=Math.sin(t*4); const hip=s*0.05;
+      return bp({ left_hip:{x:CXX-0.08+hip,y:HIPY}, right_hip:{x:CXX+0.08+hip,y:HIPY},
+        right_knee:{x:CXX+0.09+hip,y:HIPY+0.10+Math.abs(s)*0.04}, right_ankle:{x:CXX+0.10+hip,y:HIPY+0.24} }); } },
+
+  { name: 'Deep torso arch (fwd/back)', fn: (t) => {
+      const a=Math.sin(t*2.2);
+      return bp({ nose:{x:CXX,y:0.28+a*0.06},
+        left_shoulder:{x:CXX-0.09,y:SHY+a*0.05}, right_shoulder:{x:CXX+0.09,y:SHY+a*0.05},
+        left_elbow:{x:CXX-0.16,y:SHY+0.10+a*0.05}, right_elbow:{x:CXX+0.16,y:SHY+0.10+a*0.05} }); } },
+
+  { name: 'Continuous body vibration', fn: (t) => {
+      const v=Math.sin(t*24)*0.008, v2=Math.cos(t*24)*0.008;
+      const p=basePose(); for(const k in p){p[k]={x:p[k].x+v,y:p[k].y+v2};} return p; } },
+
+  { name: 'Fwd/back head movement', fn: (t) => {
+      const h=Math.sin(t*3.4)*0.05;
+      return bp({ nose:{x:CXX,y:0.28-Math.abs(h)*0.4}, left_shoulder:{x:CXX-0.09,y:SHY-h*0.1}, right_shoulder:{x:CXX+0.09,y:SHY-h*0.1} }); } },
+
+  { name: 'Alternating arm circles + shift', fn: (t) => {
+      const sh=Math.sin(t*2)*0.05;
+      return bp({ nose:{x:CXX+sh,y:0.28},
+        left_wrist:{x:CXX-0.15+Math.cos(t*3)*0.06+sh,y:SHY+0.05+Math.sin(t*3)*0.10},
+        right_wrist:{x:CXX+0.15+Math.cos(t*3+Math.PI)*0.06+sh,y:SHY+0.05+Math.sin(t*3+Math.PI)*0.10},
+        left_hip:{x:CXX-0.08+sh,y:HIPY}, right_hip:{x:CXX+0.08+sh,y:HIPY} }); } },
+
+  { name: 'Pull arms to chest / release', fn: (t) => {
+      const p=(Math.sin(t*2.5)*0.5+0.5);
+      return bp({ left_wrist:{x:CXX-0.03,y:SHY+0.08}, right_wrist:{x:CXX+0.03,y:SHY+0.08},
+        left_elbow:{x:CXX-0.10-p*0.06,y:SHY+0.08}, right_elbow:{x:CXX+0.10+p*0.06,y:SHY+0.08} }); } },
+
+  { name: 'Step forward, arms pull up', fn: (t) => {
+      const p=(Math.sin(t*2)*0.5+0.5);
+      return bp({ left_wrist:{x:CXX-0.13,y:SHY-p*0.22}, right_wrist:{x:CXX+0.13,y:SHY-p*0.22},
+        left_elbow:{x:CXX-0.13,y:SHY-p*0.08}, right_elbow:{x:CXX+0.13,y:SHY-p*0.08},
+        left_knee:{x:CXX-0.09,y:HIPY+0.14+p*0.03} }); } },
+
+  { name: 'Open arms, chest to sky', fn: (t) => {
+      const b=Math.sin(t*1.6)*0.03;
+      return bp({ nose:{x:CXX,y:0.26-b}, left_wrist:{x:CXX-0.28,y:SHY-0.06-b}, right_wrist:{x:CXX+0.28,y:SHY-0.06-b},
+        left_elbow:{x:CXX-0.17,y:SHY-0.02-b}, right_elbow:{x:CXX+0.17,y:SHY-0.02-b} }); } },
+
+  { name: 'One-foot pivot turn, arms out', fn: (t) => {
+      const w=(Math.sin(t*2.5)*0.5+0.5); const sc=0.4+0.6*w;
+      return bp({ left_shoulder:{x:CXX-0.09*sc,y:SHY}, right_shoulder:{x:CXX+0.09*sc,y:SHY},
+        left_wrist:{x:CXX-0.26*sc,y:SHY}, right_wrist:{x:CXX+0.26*sc,y:SHY},
+        left_elbow:{x:CXX-0.17*sc,y:SHY}, right_elbow:{x:CXX+0.17*sc,y:SHY},
+        left_hip:{x:CXX-0.08*sc,y:HIPY}, right_hip:{x:CXX+0.08*sc,y:HIPY} }); } },
+
+  { name: 'Rapid spin on one foot', fn: (t) => {
+      const w=Math.abs(Math.sin(t*6)); const sc=0.15+0.85*w;
+      return bp({ left_shoulder:{x:CXX-0.09*sc,y:SHY}, right_shoulder:{x:CXX+0.09*sc,y:SHY},
+        left_wrist:{x:CXX-0.2*sc,y:SHY+0.08}, right_wrist:{x:CXX+0.2*sc,y:SHY+0.08},
+        left_hip:{x:CXX-0.08*sc,y:HIPY}, right_hip:{x:CXX+0.08*sc,y:HIPY} }); } },
+
+  { name: 'Twisting waist & hips', fn: (t) => {
+      const tw=Math.sin(t*3)*0.06;
+      return bp({ left_shoulder:{x:CXX-0.09-tw,y:SHY}, right_shoulder:{x:CXX+0.09-tw,y:SHY},
+        left_hip:{x:CXX-0.08+tw,y:HIPY}, right_hip:{x:CXX+0.08+tw,y:HIPY} }); } },
+
+  { name: 'Deep knee bending', fn: (t) => {
+      const b=(Math.sin(t*2)*0.5+0.5)*0.08;
+      return bp({ left_hip:{x:CXX-0.08,y:HIPY+b}, right_hip:{x:CXX+0.08,y:HIPY+b},
+        left_knee:{x:CXX-0.11,y:HIPY+0.14+b*0.5}, right_knee:{x:CXX+0.11,y:HIPY+0.14+b*0.5},
+        nose:{x:CXX,y:0.28+b} }); } },
+
+  { name: 'Peacock posture', fn: (t) => {
+      const f=Math.sin(t*2)*0.04;
+      return bp({ left_wrist:{x:CXX-0.26,y:SHY-0.10+f}, right_wrist:{x:CXX+0.26,y:SHY-0.10-f},
+        left_elbow:{x:CXX-0.16,y:SHY-0.04}, right_elbow:{x:CXX+0.16,y:SHY-0.04},
+        nose:{x:CXX,y:0.27} }); } },
+
+  { name: 'Stomp & wide arm swing', fn: (t) => {
+      const s=Math.sin(t*3);
+      return bp({ left_wrist:{x:CXX-0.18-s*0.06,y:SHY+0.05+s*0.1}, right_wrist:{x:CXX+0.18+s*0.06,y:SHY+0.05-s*0.1},
+        left_knee:{x:CXX-0.09,y:HIPY+0.10+Math.max(0,s)*0.06}, right_knee:{x:CXX+0.09,y:HIPY+0.10+Math.max(0,-s)*0.06} }); } },
+
+  { name: 'Slow weight shift', fn: (t) => {
+      const sh=Math.sin(t*1.2)*0.06;
+      const p=basePose(); for(const k in p){p[k]={x:p[k].x+sh,y:p[k].y};} return p; } },
+
+  { name: 'Clapping', fn: (t) => {
+      const c=Math.abs(Math.sin(t*6))*0.12;
+      return bp({ left_wrist:{x:CXX-0.02-c,y:SHY+0.04}, right_wrist:{x:CXX+0.02+c,y:SHY+0.04},
+        left_elbow:{x:CXX-0.10-c*0.5,y:SHY+0.06}, right_elbow:{x:CXX+0.10+c*0.5,y:SHY+0.06} }); } },
+
+  { name: 'Stillness', fn: (t) => bp({ nose:{x:CXX,y:0.28+Math.sin(t*1.0)*0.004} }) },
+];
+
+let moveIdx = 0, move0 = null;
+const MOVE_TIME = 3.0;
+function currentMovePose(t) {
+  if (move0 === null) move0 = t;
+  if (t - move0 >= MOVE_TIME) { moveIdx = (moveIdx+1) % DANCE_MOVES.length; move0 = t; }
+  return DANCE_MOVES[moveIdx].fn(t);
+}
+function currentMoveName() { return DANCE_MOVES[moveIdx].name; }
+
 // Stick-LINE figure matching the yellow sketch: a single spine line, with
 // arms and legs branching off — NO torso rectangle. Bendable, elegant.
 // Uses mid-shoulder and mid-hip as spine joints so the body reads as lines.
@@ -1511,7 +1634,14 @@ async function renderLoop() {
   ctx.fillStyle = '#12140f';
   ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
   ctx.restore();
-  drawDanceCurve(targetRect, now);
+  const movePose = currentMovePose(now);
+  drawStickLine(movePose, targetRect, { mirror:false, width:4, color:'rgba(226,34,54,0.95)', headR:16, sc:1.1, spreadY:1.3 });
+  // move name label
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = '600 14px -apple-system, sans-serif';
+  ctx.fillText(currentMoveName(), targetRect.x + 12, targetRect.y + targetRect.h - 20);
+  ctx.restore();
 
   // --- Camera panel: (filtered) video + your green figure ---
   drawCameraToRect(camRect, faceFilterMode);
@@ -1520,16 +1650,16 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
-      drawTrackingLine(named, camRect, {});
-      // hint if the 3 tracking points aren't all visible
-      const haveRW = !!named.right_wrist, haveHip = !!(named.left_hip||named.right_hip), haveLA = !!named.left_ankle;
-      if (!(haveRW && haveHip && haveLA)) {
+      drawStickLine(named, camRect, { mirror:true, width:4, color:'rgba(70,235,130,0.95)', headR:14, sc:1, spreadY:1 });
+      // hint if body not fully visible
+      const okB = named.left_shoulder && named.right_shoulder && (named.left_hip||named.right_hip);
+      if (!okB) {
         ctx.save();
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(camRect.x+10, camRect.y+camRect.h-46, 240, 34);
+        ctx.fillRect(camRect.x+10, camRect.y+camRect.h-46, 220, 34);
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
         ctx.font = '600 13px -apple-system, sans-serif';
-        ctx.fillText('Step back — show hand, hip & foot', camRect.x+18, camRect.y+camRect.h-24);
+        ctx.fillText('Step back — show your body', camRect.x+18, camRect.y+camRect.h-24);
         ctx.restore();
       }
     }
