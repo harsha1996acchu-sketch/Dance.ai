@@ -169,6 +169,23 @@
   }
   #filterToggle:active { background: rgba(255,180,120,0.28); }
 
+  #fsToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    right: 16px;
+    margin-top: 44px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #fsToggle:active { background: rgba(255,255,255,0.25); }
+
   .overlayScreen {
     position: absolute;
     inset: 0;
@@ -278,6 +295,7 @@
 
   <button id="layoutToggle" class="hidden">Guide: Beside</button>
   <button id="filterToggle" class="hidden">Filter: Off</button>
+  <button id="fsToggle" class="hidden">⛶ Fullscreen</button>
 
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
@@ -329,6 +347,18 @@ const danceProgressFill = document.getElementById('danceProgressFill');
 const danceTimeLabel = document.getElementById('danceTimeLabel');
 const layoutToggle = document.getElementById('layoutToggle');
 const filterToggle = document.getElementById('filterToggle');
+const fsToggle = document.getElementById('fsToggle');
+fsToggle.addEventListener('click', () => {
+  const el = document.documentElement;
+  if (!document.fullscreenElement) {
+    (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen).call(el);
+    fsToggle.textContent = '⛶ Exit';
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen).call(document);
+    fsToggle.textContent = '⛶ Fullscreen';
+  }
+  setTimeout(resizeCanvas, 300);
+});
 
 let detector = null;
 let running = false;
@@ -1993,29 +2023,29 @@ async function renderLoop() {
         return lines;
       };
       const maxW = Math.min(targetRect.w - 48, 620);
-      const fName = '700 20px -apple-system, "Segoe UI", sans-serif';
-      const fDance = '600 12px -apple-system, sans-serif';
-      const fText = '500 14px -apple-system, sans-serif';
-      const fMean = 'italic 500 13px -apple-system, sans-serif';
+      const fName = '700 30px -apple-system, "Segoe UI", sans-serif';
+      const fDance = '600 17px -apple-system, sans-serif';
+      const fText = '600 22px -apple-system, sans-serif';
+      const fMean = 'italic 500 18px -apple-system, sans-serif';
       const nameLines = wrap(mv.name, maxW, fName);
       const textLines = wrap(mv.text, maxW, fText);
       const meanLines = wrap(mv.meaning, maxW, fMean);
-      const totalH = 22 + nameLines.length*24 + 18 + textLines.length*19 + meanLines.length*18 + 14;
+      const totalH = 26 + nameLines.length*36 + 26 + textLines.length*28 + meanLines.length*24 + 16;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(gcx - maxW/2 - 14, gy - 24, maxW + 28, totalH);
-      let ty = gy;
-      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.fillRect(gcx - maxW/2 - 16, gy - 30, maxW + 32, totalH);
+      let ty = gy + 6;
+      ctx.fillStyle = 'rgba(255,255,255,0.98)';
       ctx.font = fName;
-      for (const L of nameLines) { ctx.fillText(L, gcx, ty); ty += 24; }
-      ctx.fillStyle = 'rgba(140,220,255,0.9)';
+      for (const L of nameLines) { ctx.fillText(L, gcx, ty); ty += 36; }
+      ctx.fillStyle = 'rgba(150,215,255,0.92)';
       ctx.font = fDance;
-      ctx.fillText(mv.dance, gcx, ty); ty += 22;
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText(mv.dance, gcx, ty); ty += 30;
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.font = fText;
-      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 19; }
-      ctx.fillStyle = 'rgba(255,210,120,0.95)';
+      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 28; }
+      ctx.fillStyle = 'rgba(255,214,130,0.95)';
       ctx.font = fMean;
-      for (const L of meanLines) { ctx.fillText(L, gcx, ty); ty += 18; }
+      for (const L of meanLines) { ctx.fillText(L, gcx, ty); ty += 24; }
       ctx.restore();
     }
   }
@@ -2076,6 +2106,7 @@ startBtn.addEventListener('click', async () => {
     setStatus('Live', 'ready');
     running = true;
     filterToggle.classList.remove('hidden');
+    fsToggle.classList.remove('hidden');
     filterToggle.textContent = FILTER_LABELS[faceFilterMode];
     renderLoop();
   } catch (err) {
