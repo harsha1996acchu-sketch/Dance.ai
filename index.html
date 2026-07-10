@@ -2004,7 +2004,7 @@ async function renderLoop() {
       ctx.font = '700 22px -apple-system, sans-serif';
       ctx.fillText(Math.ceil(remain) + 's', targetRect.x + targetRect.w - 16, targetRect.y + 46);
       ctx.restore();
-      // guidance: movement name, dance origin, instruction, meaning
+      // guidance: only the white instruction + blue region line
       ctx.save();
       ctx.textAlign = 'center';
       const gcx = targetRect.x + targetRect.w/2;
@@ -2023,29 +2023,19 @@ async function renderLoop() {
         return lines;
       };
       const maxW = Math.min(targetRect.w - 48, 620);
-      const fName = '700 30px -apple-system, "Segoe UI", sans-serif';
+      const fText = '600 24px -apple-system, "Segoe UI", sans-serif';
       const fDance = '600 17px -apple-system, sans-serif';
-      const fText = '600 22px -apple-system, sans-serif';
-      const fMean = 'italic 500 18px -apple-system, sans-serif';
-      const nameLines = wrap(mv.name, maxW, fName);
       const textLines = wrap(mv.text, maxW, fText);
-      const meanLines = wrap(mv.meaning, maxW, fMean);
-      const totalH = 26 + nameLines.length*36 + 26 + textLines.length*28 + meanLines.length*24 + 16;
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(gcx - maxW/2 - 16, gy - 30, maxW + 32, totalH);
-      let ty = gy + 6;
-      ctx.fillStyle = 'rgba(255,255,255,0.98)';
-      ctx.font = fName;
-      for (const L of nameLines) { ctx.fillText(L, gcx, ty); ty += 36; }
+      const totalH = 20 + textLines.length*30 + 26 + 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(gcx - maxW/2 - 16, gy - 26, maxW + 32, totalH);
+      let ty = gy + 4;
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.font = fText;
+      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 30; }
       ctx.fillStyle = 'rgba(150,215,255,0.92)';
       ctx.font = fDance;
-      ctx.fillText(mv.dance, gcx, ty); ty += 30;
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.font = fText;
-      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 28; }
-      ctx.fillStyle = 'rgba(255,214,130,0.95)';
-      ctx.font = fMean;
-      for (const L of meanLines) { ctx.fillText(L, gcx, ty); ty += 24; }
+      ctx.fillText(mv.dance, gcx, ty + 2);
       ctx.restore();
     }
   }
@@ -2057,7 +2047,7 @@ async function renderLoop() {
     if (poses[0]) {
       const named = keypointsToNamed(poses[0].keypoints);
       if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
-      drawStickLine(named, camRect, { mirror:true, width:4, color:'rgba(70,235,130,0.95)', headR:14, sc:1, spreadY:1 });
+      drawStickLine(named, camRect, { mirror:true, width:5, color:'rgba(34,160,90,0.95)', headR:14, sc:1, spreadY:1 });
       // hint if body not fully visible
       const okB = named.left_shoulder && named.right_shoulder && (named.left_hip||named.right_hip);
       if (!okB) {
