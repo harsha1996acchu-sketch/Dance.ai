@@ -79,21 +79,9 @@
     flex-direction: column;
     gap: 10px;
   }
-  #legend {
-    display: flex;
-    gap: 16px;
-    font-size: 12px;
-  }
-  .dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-  }
-  .dot.you { background: #e22236; }
-  .dot.guide { background: var(--guide); }
+  .hidden { display: none !important; }
 
-  #startBtn {
+  #startBtn, .consentBtn {
     -webkit-appearance: none;
     border: none;
     background: var(--paper);
@@ -124,32 +112,61 @@
     margin: 0 0 8px;
     letter-spacing: -0.01em;
   }
-  #startScreen p {
-    font-size: 13px;
-    color: var(--muted);
-    max-width: 320px;
-    line-height: 1.5;
-    margin: 0 0 28px;
-  }
-  .hidden { display: none !important; }
-
-  #layoutToggle {
-    position: absolute;
-    top: env(safe-area-inset-top, 16px);
-    left: 50%;
-    transform: translateX(-50%);
-    margin-top: 44px;
-    z-index: 12;
-    -webkit-appearance: none;
-    border: 1px solid rgba(94,226,255,0.5);
-    background: rgba(94,226,255,0.12);
-    color: #cbf3ff;
-    font-size: 12px;
+  #startScreen .askText {
+    font-size: 22px;
     font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 20px;
+    color: var(--paper);
+    max-width: 320px;
+    line-height: 1.4;
+    margin: 18px 0 10px;
   }
-  #layoutToggle:active { background: rgba(94,226,255,0.25); }
+  #startScreen .subText {
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: 300px;
+    line-height: 1.5;
+    margin: 0 0 30px;
+  }
+  #consentBtns {
+    display: flex;
+    gap: 14px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .consentBtn { flex: 1; }
+  .consentBtn.yes { background: var(--line); color: var(--paper); }
+  .consentBtn.no { background: transparent; border: 1px solid rgba(242,239,230,0.35); color: var(--paper); }
+  .consentBtn:active { opacity: 0.8; }
+
+  #byeScreen {
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    z-index: 20;
+    overflow: hidden;
+  }
+  #byeCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  #byeText {
+    position: absolute;
+    top: 12%;
+    left: 0; right: 0;
+    text-align: center;
+    padding: 0 32px;
+  }
+  #byeText h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  #byeText p {
+    font-size: 15px;
+    color: var(--muted);
+    margin: 0;
+  }
 
   #filterToggle {
     position: absolute;
@@ -186,77 +203,6 @@
   }
   #fsToggle:active { background: rgba(255,255,255,0.25); }
 
-  .overlayScreen {
-    position: absolute;
-    inset: 0;
-    z-index: 15;
-    background: rgba(13,15,12,0.88);
-    backdrop-filter: blur(6px);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 32px;
-    text-align: center;
-  }
-  .overlayScreen h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0 0 8px;
-  }
-  .overlayScreen p {
-    font-size: 13px;
-    color: var(--muted);
-    max-width: 300px;
-    line-height: 1.5;
-    margin: 0 0 24px;
-  }
-
-  #danceList {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-    max-width: 320px;
-  }
-  .danceOption {
-    -webkit-appearance: none;
-    border: 1px solid rgba(94,226,255,0.35);
-    background: rgba(94,226,255,0.08);
-    color: var(--paper);
-    text-align: left;
-    padding: 14px 16px;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-  .danceOption:active { background: rgba(94,226,255,0.18); }
-  .danceOption .sub {
-    display: block;
-    font-size: 11.5px;
-    font-weight: 400;
-    color: var(--muted);
-    margin-top: 2px;
-  }
-
-  #replayBtn, #pickAnotherBtn {
-    -webkit-appearance: none;
-    border: none;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 13px 20px;
-    border-radius: 10px;
-    width: 100%;
-    max-width: 280px;
-    margin-top: 8px;
-  }
-  #pickAnotherBtn { background: var(--paper); color: var(--ink); }
-  #replayBtn.ghostBtn {
-    background: transparent;
-    border: 1px solid rgba(242,239,230,0.3);
-    color: var(--paper);
-  }
-
   #danceProgressWrap {
     margin-bottom: 2px;
   }
@@ -283,44 +229,38 @@
 
 <div id="startScreen">
   <h1>Dance Mirror</h1>
-  <p>Privacy mode: your face is never shown or recorded. A red figure shows a pose — line up your green body onto it to match. It changes about every second. Everything runs offline on your phone.</p>
-  <button id="startBtn">Start camera</button>
+  <p class="askText">Can I borrow your body for a dance?</p>
+  <p class="subText">Your face is never shown or recorded. Everything runs offline on your phone.</p>
+  <div id="consentBtns">
+    <button id="yesBtn" class="consentBtn yes">Yes</button>
+    <button id="noBtn" class="consentBtn no">No</button>
+  </div>
+</div>
+
+<div id="byeScreen" class="hidden">
+  <canvas id="byeCanvas"></canvas>
+  <div id="byeText">
+    <h1>Thank you for participating</h1>
+    <p>Bye bye, have a nice day! 👋</p>
+  </div>
 </div>
 
 <div id="stage" class="hidden">
   <div id="ui">
-    <div id="title">Dance Mirror — Test</div>
+    <div id="title">Dance Mirror</div>
     <div id="status" class="loading">Loading model…</div>
   </div>
 
-  <button id="layoutToggle" class="hidden">Guide: Beside</button>
   <button id="filterToggle" class="hidden">Filter: Off</button>
   <button id="fsToggle" class="hidden">⛶ Fullscreen</button>
 
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay"></canvas>
 
-  <div id="selectScreen" class="overlayScreen hidden">
-    <h1>Choose a dance</h1>
-    <p>Each guide runs for about 25 seconds. Follow the cyan figure.</p>
-    <div id="danceList"></div>
-  </div>
-
-  <div id="doneScreen" class="overlayScreen hidden">
-    <h1>Dance complete</h1>
-    <p id="doneDanceName"></p>
-    <button id="replayBtn" class="ghostBtn">Replay this dance</button>
-    <button id="pickAnotherBtn">Choose another dance</button>
-  </div>
-
   <div id="bottom">
     <div id="danceProgressWrap" class="hidden">
       <div id="danceProgressBar"><div id="danceProgressFill"></div></div>
       <div id="danceTimeLabel">0:00 / 0:00</div>
-    </div>
-    <div id="legend">
-      <span><span class="dot" style="background:#e22236"></span>Match this</span>
-      <span><span class="dot" style="background:#46eb82"></span>You</span>
     </div>
   </div>
 </div>
@@ -330,22 +270,19 @@
 
 <script>
 const startScreen = document.getElementById('startScreen');
-const startBtn = document.getElementById('startBtn');
+const yesBtn = document.getElementById('yesBtn');
+const noBtn = document.getElementById('noBtn');
+const byeScreen = document.getElementById('byeScreen');
+const byeCanvas = document.getElementById('byeCanvas');
+const byeCtx = byeCanvas.getContext('2d');
 const stage = document.getElementById('stage');
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
-const selectScreen = document.getElementById('selectScreen');
-const danceListEl = document.getElementById('danceList');
-const doneScreen = document.getElementById('doneScreen');
-const doneDanceNameEl = document.getElementById('doneDanceName');
-const replayBtn = document.getElementById('replayBtn');
-const pickAnotherBtn = document.getElementById('pickAnotherBtn');
 const danceProgressWrap = document.getElementById('danceProgressWrap');
 const danceProgressFill = document.getElementById('danceProgressFill');
 const danceTimeLabel = document.getElementById('danceTimeLabel');
-const layoutToggle = document.getElementById('layoutToggle');
 const filterToggle = document.getElementById('filterToggle');
 const fsToggle = document.getElementById('fsToggle');
 fsToggle.addEventListener('click', () => {
@@ -362,16 +299,10 @@ fsToggle.addEventListener('click', () => {
 
 let detector = null;
 let running = false;
-let layoutMode = 'beside'; // 'beside' or 'overlay'
 
 const FILTER_MODES = ['none', 'thermal', 'negative', 'pixel'];
 const FILTER_LABELS = { none: 'Filter: Off', thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
 let faceFilterMode = 'none';
-
-layoutToggle.addEventListener('click', () => {
-  layoutMode = layoutMode === 'beside' ? 'overlay' : 'beside';
-  layoutToggle.textContent = layoutMode === 'beside' ? 'Guide: Beside' : 'Guide: Overlay';
-});
 
 filterToggle.addEventListener('click', () => {
   const i = FILTER_MODES.indexOf(faceFilterMode);
@@ -523,94 +454,6 @@ function makeSequenceFn(sequence, stepDuration) {
   };
 }
 
-const DANCES = [
-  {
-    id: 'bhangra',
-    name: 'Bhangra (placeholder)',
-    sub: 'Punjab · energetic arms up, 6 moves',
-    duration: 25,
-    poseFn: makeSequenceFn(
-      ['armsUp','rightUp','armsUp','leftUp','handsHips','oneKneeUp'], 1.1),
-  },
-  {
-    id: 'garba',
-    name: 'Garba (placeholder)',
-    sub: 'Gujarat · circular sway & claps, 6 moves',
-    duration: 25,
-    poseFn: makeSequenceFn(
-      ['leanLeft','clapCenter','leanRight','clapCenter','armsOutT','handsHips'], 1.5),
-  },
-  {
-    id: 'kathak',
-    name: 'Kathak (placeholder)',
-    sub: 'North India · sharp poses & holds, 7 moves',
-    duration: 25,
-    poseFn: makeSequenceFn(
-      ['prayer','rightUp','armsOutT','leftUp','handsHips','leanRight','prayer'], 1.6),
-  },
-  {
-    id: 'odissi',
-    name: 'Odissi (placeholder)',
-    sub: 'Odisha · slow graceful curves, 6 moves',
-    duration: 25,
-    poseFn: makeSequenceFn(
-      ['prayer','leanLeft','armsOutT','leanRight','armsUp','neutral'], 2.4),
-  },
-];
-
-let currentDance = null;
-let danceStartTime = null;
-let danceFinished = false;
-
-const SKELETON_PAIRS = [
-  ['left_shoulder','right_shoulder'],
-  ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
-  ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
-  ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
-  ['left_hip','right_hip'],
-  ['left_hip','left_knee'],['left_knee','left_ankle'],
-  ['right_hip','right_knee'],['right_knee','right_ankle'],
-];
-
-function formatTime(s) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2,'0')}`;
-}
-
-function populateDanceList() {
-  danceListEl.innerHTML = '';
-  DANCES.forEach(d => {
-    const btn = document.createElement('button');
-    btn.className = 'danceOption';
-    btn.innerHTML = `${d.name}<span class="sub">${d.sub} · ${formatTime(d.duration)}</span>`;
-    btn.addEventListener('click', () => startDance(d));
-    danceListEl.appendChild(btn);
-  });
-}
-
-function startDance(dance) {
-  currentDance = dance;
-  danceStartTime = performance.now() / 1000;
-  danceFinished = false;
-  selectScreen.classList.add('hidden');
-  doneScreen.classList.add('hidden');
-  danceProgressWrap.classList.remove('hidden');
-}
-
-function finishDance() {
-  danceFinished = true;
-  danceProgressWrap.classList.add('hidden');
-  doneDanceNameEl.textContent = currentDance.name + ' finished';
-  doneScreen.classList.remove('hidden');
-}
-
-replayBtn.addEventListener('click', () => startDance(currentDance));
-pickAnotherBtn.addEventListener('click', () => {
-  doneScreen.classList.add('hidden');
-  selectScreen.classList.remove('hidden');
-});
-
 function setStatus(text, cls) {
   statusEl.textContent = text;
   statusEl.className = cls;
@@ -619,6 +462,8 @@ function setStatus(text, cls) {
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  byeCanvas.width = window.innerWidth;
+  byeCanvas.height = window.innerHeight;
 }
 window.addEventListener('resize', resizeCanvas);
 
@@ -1390,37 +1235,75 @@ function bp(over) { return basePose(over); }
 // Composed into 60 named moves below. Keeps distinct-looking motion while
 // honoring the real dance names from the list.
 const M = {
-  vibrate:(t,a=0.012,s=22)=>{const v=Math.sin(t*s)*a;return{left_shoulder:{x:CXX-0.09+v,y:SHY},right_shoulder:{x:CXX+0.09-v,y:SHY},left_elbow:{x:CXX-0.15+v,y:SHY+0.10},right_elbow:{x:CXX+0.15-v,y:SHY+0.10},left_wrist:{x:CXX-0.17+v,y:SHY+0.20},right_wrist:{x:CXX+0.17-v,y:SHY+0.20}};},
-  headCircle:(t,r=0.04)=>{const cx=Math.cos(t*3)*r,cy=Math.sin(t*3)*r*0.75;return{nose:{x:CXX+cx,y:0.28+cy}};},
-  headShake:(t)=>{const hx=Math.sin(t*8)*0.04;return{nose:{x:CXX+hx,y:0.28}};},
-  headNod:(t)=>{const h=Math.sin(t*3.4)*0.05;return{nose:{x:CXX,y:0.28-Math.abs(h)*0.4}};},
-  torsoArch:(t)=>{const a=Math.sin(t*2.2);return{nose:{x:CXX,y:0.28+a*0.06},left_shoulder:{x:CXX-0.09,y:SHY+a*0.05},right_shoulder:{x:CXX+0.09,y:SHY+a*0.05},left_elbow:{x:CXX-0.16,y:SHY+0.10+a*0.05},right_elbow:{x:CXX+0.16,y:SHY+0.10+a*0.05}};},
-  shift:(t,a=0.06,s=1.2)=>({__shift:Math.sin(t*s)*a}),
-  twist:(t)=>{const tw=Math.sin(t*3)*0.06;return{left_shoulder:{x:CXX-0.09-tw,y:SHY},right_shoulder:{x:CXX+0.09-tw,y:SHY},left_hip:{x:CXX-0.08+tw,y:HIPY},right_hip:{x:CXX+0.08+tw,y:HIPY}};},
-  armsUp:(t)=>{const b=Math.sin(t*1.6)*0.03;return{left_wrist:{x:CXX-0.12,y:SHY-0.20-b},right_wrist:{x:CXX+0.12,y:SHY-0.20-b},left_elbow:{x:CXX-0.13,y:SHY-0.06},right_elbow:{x:CXX+0.13,y:SHY-0.06}};},
-  armsOpen:(t)=>{const b=Math.sin(t*1.6)*0.03;return{nose:{x:CXX,y:0.26-b},left_wrist:{x:CXX-0.28,y:SHY-0.06-b},right_wrist:{x:CXX+0.28,y:SHY-0.06-b},left_elbow:{x:CXX-0.17,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY-0.02}};},
-  armCircles:(t)=>({left_wrist:{x:CXX-0.15+Math.cos(t*3)*0.06,y:SHY+0.05+Math.sin(t*3)*0.10},right_wrist:{x:CXX+0.15+Math.cos(t*3+Math.PI)*0.06,y:SHY+0.05+Math.sin(t*3+Math.PI)*0.10}}),
-  clap:(t,s=6)=>{const c=Math.abs(Math.sin(t*s))*0.12;return{left_wrist:{x:CXX-0.02-c,y:SHY+0.04},right_wrist:{x:CXX+0.02+c,y:SHY+0.04},left_elbow:{x:CXX-0.10-c*0.5,y:SHY+0.06},right_elbow:{x:CXX+0.10+c*0.5,y:SHY+0.06}};},
-  kneeBend:(t)=>{const b=(Math.sin(t*2)*0.5+0.5)*0.08;return{left_hip:{x:CXX-0.08,y:HIPY+b},right_hip:{x:CXX+0.08,y:HIPY+b},left_knee:{x:CXX-0.11,y:HIPY+0.14+b*0.5},right_knee:{x:CXX+0.11,y:HIPY+0.14+b*0.5},nose:{x:CXX,y:0.28+b}};},
-  hipStrike:(t)=>{const s=Math.sin(t*4),hip=s*0.05;return{left_hip:{x:CXX-0.08+hip,y:HIPY},right_hip:{x:CXX+0.08+hip,y:HIPY},right_knee:{x:CXX+0.09+hip,y:HIPY+0.10+Math.abs(s)*0.04}};},
-  spin:(t,s=6)=>{const w=Math.abs(Math.sin(t*s)),sc=0.15+0.85*w;return{left_shoulder:{x:CXX-0.09*sc,y:SHY},right_shoulder:{x:CXX+0.09*sc,y:SHY},left_wrist:{x:CXX-0.2*sc,y:SHY+0.08},right_wrist:{x:CXX+0.2*sc,y:SHY+0.08},left_hip:{x:CXX-0.08*sc,y:HIPY},right_hip:{x:CXX+0.08*sc,y:HIPY}};},
-  pullChest:(t)=>{const p=(Math.sin(t*2.5)*0.5+0.5);return{left_wrist:{x:CXX-0.03,y:SHY+0.08},right_wrist:{x:CXX+0.03,y:SHY+0.08},left_elbow:{x:CXX-0.10-p*0.06,y:SHY+0.08},right_elbow:{x:CXX+0.10+p*0.06,y:SHY+0.08}};},
-  stomp:(t)=>{const s=Math.sin(t*3);return{left_wrist:{x:CXX-0.18-s*0.06,y:SHY+0.05+s*0.1},right_wrist:{x:CXX+0.18+s*0.06,y:SHY+0.05-s*0.1},left_knee:{x:CXX-0.09,y:HIPY+0.10+Math.max(0,s)*0.06},right_knee:{x:CXX+0.09,y:HIPY+0.10+Math.max(0,-s)*0.06}};},
-  wave:(t)=>{const w=Math.sin(t*3)*0.05;return{left_wrist:{x:CXX-0.20,y:SHY+Math.sin(t*4)*0.08},right_wrist:{x:CXX+0.20,y:SHY+Math.sin(t*4+1)*0.08},nose:{x:CXX+w,y:0.28}};},
-  reach:(t)=>{const p=(Math.sin(t*2)*0.5+0.5);return{left_wrist:{x:CXX-0.13,y:SHY-p*0.22},right_wrist:{x:CXX+0.13,y:SHY-p*0.22},left_elbow:{x:CXX-0.13,y:SHY-p*0.08},right_elbow:{x:CXX+0.13,y:SHY-p*0.08}};},
-  oneArmUp:(t)=>{const s=Math.sin(t*2.5)*0.04;return{right_wrist:{x:CXX+0.12,y:SHY-0.22+s},right_elbow:{x:CXX+0.14,y:SHY-0.06},left_wrist:{x:CXX-0.16,y:SHY+0.22},left_elbow:{x:CXX-0.15,y:SHY+0.10}};},
-  overhead:(t)=>{const s=Math.sin(t*4)*0.10;return{left_wrist:{x:CXX-0.06+s,y:SHY-0.24},right_wrist:{x:CXX+0.06+s,y:SHY-0.24},left_elbow:{x:CXX-0.12,y:SHY-0.10},right_elbow:{x:CXX+0.12,y:SHY-0.10}};},
-  still:(t)=>({nose:{x:CXX,y:0.28+Math.sin(t*1.0)*0.004}}),
-  sway:(t,a=0.05)=>({__shift:Math.sin(t*1.5)*a}),
+  // ---- upper body ----
+  vibrate:(t,a=0.016,s=24)=>{const v=Math.sin(t*s)*a;return{left_shoulder:{x:CXX-0.09+v,y:SHY},right_shoulder:{x:CXX+0.09-v,y:SHY},left_elbow:{x:CXX-0.15+v,y:SHY+0.10},right_elbow:{x:CXX+0.15-v,y:SHY+0.10},left_wrist:{x:CXX-0.17+v,y:SHY+0.20},right_wrist:{x:CXX+0.17-v,y:SHY+0.20}};},
+  headCircle:(t,r=0.05)=>{const cx=Math.cos(t*4)*r,cy=Math.sin(t*4)*r*0.8;return{nose:{x:CXX+cx,y:0.28+cy}};},
+  headShake:(t)=>{const hx=Math.sin(t*10)*0.05;return{nose:{x:CXX+hx,y:0.28}};},
+  headNod:(t)=>{const h=Math.sin(t*4.5)*0.06;return{nose:{x:CXX,y:0.28-Math.abs(h)*0.5}};},
+  torsoArch:(t)=>{const a=Math.sin(t*3);return{nose:{x:CXX,y:0.28+a*0.08},left_shoulder:{x:CXX-0.09,y:SHY+a*0.06},right_shoulder:{x:CXX+0.09,y:SHY+a*0.06},left_elbow:{x:CXX-0.16,y:SHY+0.10+a*0.06},right_elbow:{x:CXX+0.16,y:SHY+0.10+a*0.06}};},
+  shift:(t,a=0.07,s=1.8)=>({__shift:Math.sin(t*s)*a}),
+  twist:(t)=>{const tw=Math.sin(t*4)*0.07;return{left_shoulder:{x:CXX-0.09-tw,y:SHY},right_shoulder:{x:CXX+0.09-tw,y:SHY},left_hip:{x:CXX-0.08+tw,y:HIPY},right_hip:{x:CXX+0.08+tw,y:HIPY}};},
+  armsUp:(t)=>{const b=Math.sin(t*2.5)*0.04;return{left_wrist:{x:CXX-0.12,y:SHY-0.22-b},right_wrist:{x:CXX+0.12,y:SHY-0.22-b},left_elbow:{x:CXX-0.13,y:SHY-0.06},right_elbow:{x:CXX+0.13,y:SHY-0.06}};},
+  armsOpen:(t)=>{const b=Math.sin(t*2)*0.04;return{nose:{x:CXX,y:0.26-b},left_wrist:{x:CXX-0.28,y:SHY-0.06-b},right_wrist:{x:CXX+0.28,y:SHY-0.06-b},left_elbow:{x:CXX-0.17,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY-0.02}};},
+  armCircles:(t)=>({left_wrist:{x:CXX-0.15+Math.cos(t*4.5)*0.08,y:SHY+0.05+Math.sin(t*4.5)*0.13},right_wrist:{x:CXX+0.15+Math.cos(t*4.5+Math.PI)*0.08,y:SHY+0.05+Math.sin(t*4.5+Math.PI)*0.13}}),
+  clap:(t,s=7)=>{const c=Math.abs(Math.sin(t*s))*0.14;return{left_wrist:{x:CXX-0.02-c,y:SHY+0.04},right_wrist:{x:CXX+0.02+c,y:SHY+0.04},left_elbow:{x:CXX-0.10-c*0.5,y:SHY+0.06},right_elbow:{x:CXX+0.10+c*0.5,y:SHY+0.06}};},
+  pullChest:(t)=>{const p=(Math.sin(t*3.5)*0.5+0.5);return{left_wrist:{x:CXX-0.03,y:SHY+0.08},right_wrist:{x:CXX+0.03,y:SHY+0.08},left_elbow:{x:CXX-0.10-p*0.08,y:SHY+0.08},right_elbow:{x:CXX+0.10+p*0.08,y:SHY+0.08}};},
+  wave:(t)=>{const w=Math.sin(t*4)*0.06;return{left_wrist:{x:CXX-0.20,y:SHY+Math.sin(t*5)*0.11},right_wrist:{x:CXX+0.20,y:SHY+Math.sin(t*5+1)*0.11},nose:{x:CXX+w,y:0.28}};},
+  reach:(t)=>{const p=(Math.sin(t*3)*0.5+0.5);return{left_wrist:{x:CXX-0.13,y:SHY-p*0.24},right_wrist:{x:CXX+0.13,y:SHY-p*0.24},left_elbow:{x:CXX-0.13,y:SHY-p*0.09},right_elbow:{x:CXX+0.13,y:SHY-p*0.09},left_knee:{x:CXX-0.09,y:HIPY+0.14-p*0.04},right_knee:{x:CXX+0.09,y:HIPY+0.14-p*0.04}};},
+  oneArmUp:(t)=>{const s=Math.sin(t*3.5)*0.05;return{right_wrist:{x:CXX+0.12,y:SHY-0.24+s},right_elbow:{x:CXX+0.14,y:SHY-0.06},left_wrist:{x:CXX-0.16,y:SHY+0.22},left_elbow:{x:CXX-0.15,y:SHY+0.10}};},
+  overhead:(t)=>{const s=Math.sin(t*5)*0.12;return{left_wrist:{x:CXX-0.06+s,y:SHY-0.26},right_wrist:{x:CXX+0.06+s,y:SHY-0.26},left_elbow:{x:CXX-0.12,y:SHY-0.10},right_elbow:{x:CXX+0.12,y:SHY-0.10}};},
+  still:(t)=>({nose:{x:CXX,y:0.28+Math.sin(t*1.2)*0.006}}),
+  sway:(t,a=0.07)=>({__shift:Math.sin(t*2.2)*a}),
+
+  // ---- BOLD LEG MOTION ----
+  // deep knee bend: whole body drops, knees splay
+  kneeBend:(t)=>{const b=(Math.sin(t*3)*0.5+0.5)*0.14;return{nose:{x:CXX,y:0.28+b},left_shoulder:{x:CXX-0.09,y:SHY+b},right_shoulder:{x:CXX+0.09,y:SHY+b},left_hip:{x:CXX-0.08,y:HIPY+b},right_hip:{x:CXX+0.08,y:HIPY+b},left_knee:{x:CXX-0.15,y:HIPY+0.14+b*0.5},right_knee:{x:CXX+0.15,y:HIPY+0.14+b*0.5},left_ankle:{x:CXX-0.10,y:HIPY+0.32},right_ankle:{x:CXX+0.10,y:HIPY+0.32}};},
+  // high knee lift, alternating — big visible leg raise
+  kneeLift:(t,s=4)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_knee:{x:CXX-0.09+L*0.03,y:HIPY+0.16-L*0.16},left_ankle:{x:CXX-0.10+L*0.05,y:HIPY+0.32-L*0.22},
+           right_knee:{x:CXX+0.09+R*0.03,y:HIPY+0.16-R*0.16},right_ankle:{x:CXX+0.10+R*0.05,y:HIPY+0.32-R*0.22},
+           nose:{x:CXX,y:0.28-Math.abs(p)*0.02}};},
+  // forward kick, alternating — leg extends out
+  kick:(t,s=3.5)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_knee:{x:CXX-0.09-L*0.05,y:HIPY+0.16-L*0.10},left_ankle:{x:CXX-0.10-L*0.18,y:HIPY+0.32-L*0.24},
+           right_knee:{x:CXX+0.09+R*0.05,y:HIPY+0.16-R*0.10},right_ankle:{x:CXX+0.10+R*0.18,y:HIPY+0.32-R*0.24}};},
+  // jump: whole body lifts, legs tuck
+  jump:(t,s=3)=>{const p=Math.max(0,Math.sin(t*s)),lift=p*0.10;
+    return{__lift:lift,
+           left_knee:{x:CXX-0.10,y:HIPY+0.16-p*0.05},right_knee:{x:CXX+0.10,y:HIPY+0.16-p*0.05},
+           left_ankle:{x:CXX-0.11,y:HIPY+0.32-p*0.09},right_ankle:{x:CXX+0.11,y:HIPY+0.32-p*0.09},
+           left_wrist:{x:CXX-0.16,y:SHY+0.18-p*0.30},right_wrist:{x:CXX+0.16,y:SHY+0.18-p*0.30}};},
+  // stomp: hard alternating foot strikes with arm swing
+  stomp:(t,s=4)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_wrist:{x:CXX-0.18-p*0.08,y:SHY+0.05+p*0.12},right_wrist:{x:CXX+0.18+p*0.08,y:SHY+0.05-p*0.12},
+           left_knee:{x:CXX-0.09,y:HIPY+0.16-L*0.12},left_ankle:{x:CXX-0.10,y:HIPY+0.32-L*0.16},
+           right_knee:{x:CXX+0.09,y:HIPY+0.16-R*0.12},right_ankle:{x:CXX+0.10,y:HIPY+0.32-R*0.16}};},
+  // wide leg step side to side
+  sideStep:(t,s=2.5)=>{const p=Math.sin(t*s);
+    return{left_knee:{x:CXX-0.09+p*0.06,y:HIPY+0.16},left_ankle:{x:CXX-0.12+p*0.10,y:HIPY+0.32},
+           right_knee:{x:CXX+0.09+p*0.06,y:HIPY+0.16},right_ankle:{x:CXX+0.12+p*0.10,y:HIPY+0.32},
+           left_hip:{x:CXX-0.08+p*0.03,y:HIPY},right_hip:{x:CXX+0.08+p*0.03,y:HIPY}};},
+  // hip strike with supporting leg lift
+  hipStrike:(t)=>{const s=Math.sin(t*5),hip=s*0.06,lift=Math.max(0,s);
+    return{left_hip:{x:CXX-0.08+hip,y:HIPY},right_hip:{x:CXX+0.08+hip,y:HIPY},
+           right_knee:{x:CXX+0.09+hip,y:HIPY+0.16-lift*0.12},right_ankle:{x:CXX+0.10+hip,y:HIPY+0.32-lift*0.16},
+           left_knee:{x:CXX-0.09+hip,y:HIPY+0.16}};},
+  // spin with a lifted leg
+  spin:(t,s=6)=>{const w=Math.abs(Math.sin(t*s)),sc=0.15+0.85*w,lift=(1-w)*0.10;
+    return{left_shoulder:{x:CXX-0.09*sc,y:SHY},right_shoulder:{x:CXX+0.09*sc,y:SHY},
+           left_wrist:{x:CXX-0.22*sc,y:SHY+0.02},right_wrist:{x:CXX+0.22*sc,y:SHY+0.02},
+           left_hip:{x:CXX-0.08*sc,y:HIPY},right_hip:{x:CXX+0.08*sc,y:HIPY},
+           right_knee:{x:CXX+0.09*sc,y:HIPY+0.16-lift},right_ankle:{x:CXX+0.10*sc,y:HIPY+0.32-lift*1.6}};},
 };
 
 // Build a pose from a primitive result, applying optional global __shift.
 function poseFrom(res){
   const shift = res.__shift || 0;
+  const lift = res.__lift || 0;
   const over = {};
-  for(const k in res){ if(k==='__shift') continue; over[k]=res[k]; }
+  for(const k in res){ if(k==='__shift'||k==='__lift') continue; over[k]=res[k]; }
   const p = basePose(over);
-  if(shift){ for(const k in p){ p[k]={x:p[k].x+shift,y:p[k].y}; } }
+  if(shift || lift){ for(const k in p){ p[k]={x:p[k].x+shift,y:p[k].y-lift}; } }
   return p;
 }
 
@@ -1434,15 +1317,15 @@ const DANCE_MOVES = [
   {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
    text:'Spin with arms out, eyes fixed on one point.',
    meaning:'Dissolving the self; devotion that never loses sight of the divine.',
-   fn:t=>poseFrom(M.spin(t,4))},
+   fn:t=>poseFrom(M.spin(t,4.5))},
   {dance:'Kathak · North India', name:'Tatkar — Conversation of Feet',
    text:'Speak with your feet: heel, ball, heel — upper body calm.',
    meaning:'A living dialogue with Tala, the cosmic pulse.',
-   fn:t=>poseFrom(M.stomp(t*1.4))},
+   fn:t=>poseFrom({...M.stomp(t*1.5,5),...M.kneeLift(t,5)})},
   {dance:'Kathak · North India', name:'Amad — The Arrival',
    text:'Step with intention, chest open, then sweep arms wide.',
    meaning:'Ordinary space becomes ritual space.',
-   fn:t=>poseFrom(M.reach(t*0.7))},
+   fn:t=>poseFrom({...M.reach(t*0.9),...M.kneeLift(t,2.2)})},
   {dance:'Kathak · North India', name:'Tihaii — The Triple Landing',
    text:'Repeat a phrase three times, land exactly on beat one, freeze.',
    meaning:'Three forces completing one cosmic cycle.',
@@ -1454,15 +1337,15 @@ const DANCE_MOVES = [
   {dance:'Odissi · Odisha', name:'Chauka — The Square',
    text:'Feet wide, knees deep, spine vertical — a grounded square.',
    meaning:'The immovable masculine principle; the body as mandala.',
-   fn:t=>poseFrom(M.kneeBend(t*0.5))},
+   fn:t=>poseFrom(M.kneeBend(t*0.8))},
   {dance:'Odissi · Odisha', name:'Chali — The Sacred Walk',
    text:'Walk with a gentle continuous hip sway, arms in slow arcs.',
    meaning:'Walking made conscious, made devotional.',
-   fn:t=>poseFrom({...M.sway(t,0.05),...M.armCircles(t*0.5)})},
+   fn:t=>poseFrom({...M.sideStep(t,2.2),...M.armCircles(t*0.8)})},
   {dance:'Manipuri · Manipur', name:'The Floating Step',
    text:'Steps like setting feet on still water — head level, no bounce.',
    meaning:'The earth is sacred; carry as little ego-weight as possible.',
-   fn:t=>poseFrom(M.sway(t*0.7,0.04))},
+   fn:t=>poseFrom({...M.sideStep(t,1.8),...M.sway(t*0.8,0.04)})},
   {dance:'Manipuri · Manipur', name:'The Circular Flow',
    text:'Turn slowly like the earth rotating, a wave through the arms.',
    meaning:'Time is circular; every ending contains a beginning.',
@@ -1474,47 +1357,47 @@ const DANCE_MOVES = [
   {dance:'Chhau · East India', name:'The Warrior Leap',
    text:'Coil low, explode upward, arms wide — land in silence.',
    meaning:'Divine fury exceeding what ordinary bodies can do.',
-   fn:t=>poseFrom(M.stomp(t*1.2))},
+   fn:t=>poseFrom({...M.jump(t,2.6),...M.armsOpen(t)})},
   {dance:'Chhau · East India', name:'The Demon Walk',
    text:'Be enormous: slow, heavy steps, eyes above the crowd.',
    meaning:'Tamas — the necessary weight and darkness of the cosmos.',
-   fn:t=>poseFrom(M.shift(t,0.07,0.7))},
+   fn:t=>poseFrom({...M.kneeBend(t*0.4),...M.stomp(t*0.5,1.6),__shift:Math.sin(t*0.7)*0.07})},
   {dance:'Garba · Gujarat', name:'The Circle Walk',
    text:'Walk counterclockwise around the sacred center.',
    meaning:'Every dancer becomes a planet orbiting the divine.',
-   fn:t=>poseFrom(M.sway(t,0.06))},
+   fn:t=>poseFrom({...M.sideStep(t,2.6),...M.sway(t,0.05)})},
   {dance:'Garba · Gujarat', name:'Teen Taali — Three Claps',
    text:'Clap above, at heart, at waist — the body as percussion.',
    meaning:'Three claps for three aspects of the goddess.',
-   fn:t=>poseFrom(M.clap(t,4))},
+   fn:t=>poseFrom({...M.clap(t,5),...M.kneeLift(t,3.5)})},
   {dance:'Garba · Gujarat', name:'Dandiya Ras — Stick Strike',
    text:'Strike right, strike left, strike above — every hit rings.',
    meaning:'Re-sounding the cosmic battle of goddess and demon.',
-   fn:t=>poseFrom(M.clap(t,6))},
+   fn:t=>poseFrom({...M.clap(t,6),...M.sideStep(t,3)})},
   {dance:'Bhangra · Punjab', name:'The Shoulder Roll',
    text:'Roll shoulders in big opposing circles, knees bouncing.',
    meaning:'Farm labour transformed into gratitude and joy.',
-   fn:t=>poseFrom(M.vibrate(t,0.014,8))},
+   fn:t=>poseFrom({...M.vibrate(t,0.016,9),...M.kneeLift(t,3)})},
   {dance:'Bhangra · Punjab', name:'The Bhangra Jump',
    text:'Deep bend — then jump, arms rising, land soft and go again.',
    meaning:'A whole season of worry released upward in one moment.',
-   fn:t=>poseFrom(M.stomp(t*1.3))},
+   fn:t=>poseFrom(M.jump(t,2.8))},
   {dance:'Bhangra · Punjab', name:'Kato — The Waist Bend',
    text:'Arms overhead, bend deep right, then deep left, with momentum.',
    meaning:'Chardikala: optimism that refuses defeat.',
-   fn:t=>poseFrom({...M.twist(t*0.8),...M.overhead(t*0.8)})},
+   fn:t=>poseFrom({...M.twist(t*0.9),...M.overhead(t*0.9),...M.sideStep(t,2.2)})},
   {dance:'Bhangra · Punjab', name:'Dhamaal — Full Release',
    text:'Everything at once — shoulders, knees, arms, head. Hold nothing.',
    meaning:'The body at its most free is most connected to others.',
-   fn:t=>poseFrom({...M.vibrate(t,0.012,14),...M.stomp(t)})},
+   fn:t=>poseFrom({...M.vibrate(t,0.014,16),...M.stomp(t,5),...M.kneeLift(t,4.5)})},
   {dance:'Bihu · Assam', name:'The Flutter Hands',
    text:'Wrists loose, hands flutter like new leaves in spring wind.',
    meaning:'The human body waking with the land after winter.',
-   fn:t=>poseFrom(M.vibrate(t,0.010,18))},
+   fn:t=>poseFrom({...M.vibrate(t,0.012,20),...M.kneeLift(t,2.8)})},
   {dance:'Bihu · Assam', name:'Dolobari — The Hip Sway',
    text:'Full generous weight shifts hip to hip, arms exchanging.',
    meaning:'Celebrating fertility and the continuation of life.',
-   fn:t=>poseFrom({...M.twist(t*0.9),__shift:Math.sin(t*1.8)*0.05})},
+   fn:t=>poseFrom({...M.twist(t),...M.sideStep(t,2.4)})},
   {dance:'Lavani · Maharashtra', name:'The Hip Stitch',
    text:'Sharp isolated hip pops — upper body still, face composed.',
    meaning:'Precise self-ownership that cannot be passively consumed.',
@@ -1528,19 +1411,19 @@ const DANCE_MOVES = [
   {dance:'Bandari · Persian Gulf', name:'Fisherman Net Pull',
    text:'Pull both arms back as if hauling a heavy rope from the sea.',
    meaning:'The collective effort of fishermen made into dance.',
-   fn:t=>poseFrom(M.pullChest(t))},
+   fn:t=>poseFrom({...M.pullChest(t),...M.sideStep(t,2.2)})},
   {dance:'Bandari · Persian Gulf', name:'Shoulder & Chest Vibration',
    text:'Continuous rhythmic shivers through shoulders and chest.',
    meaning:'The energy of music shaped by cultures meeting at the ports.',
-   fn:t=>poseFrom(M.vibrate(t,0.013,20))},
+   fn:t=>poseFrom({...M.vibrate(t,0.015,22),...M.kneeLift(t,3.5)})},
   {dance:'Bandari · Persian Gulf', name:'Hair & Torso Waves',
    text:'Swing head in circles while the torso lifts and falls.',
    meaning:'The body amplified like waves rising on the sea.',
-   fn:t=>poseFrom({...M.headCircle(t,0.05),...M.torsoArch(t*0.8)})},
+   fn:t=>poseFrom({...M.headCircle(t,0.06),...M.torsoArch(t*0.9),...M.kneeLift(t,2.8)})},
   {dance:'Zār ritual · Southern Iran', name:'The Healing Shake',
    text:'Shake the head side to side, hands trembling, body pushing fwd/back.',
    meaning:'Driving the harmful wind out of the body.',
-   fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.008,24)})},
+   fn:t=>poseFrom({...M.headShake(t),...M.vibrate(t,0.010,26),...M.stomp(t,4)})},
   {dance:'Zār ritual · Southern Iran', name:'Trance Repetition',
    text:'Repeat one simple pattern as the rhythm slowly accelerates.',
    meaning:'Repetition until exhaustion and ecstasy are one.',
@@ -1552,27 +1435,27 @@ const DANCE_MOVES = [
   {dance:'Bandari · Persian Gulf', name:'The Deep Arch',
    text:'Bend forward toward the ground, then arch dramatically back.',
    meaning:'Strength, endurance, mastery over the body.',
-   fn:t=>poseFrom(M.torsoArch(t*0.7))},
+   fn:t=>poseFrom({...M.torsoArch(t*0.7),...M.kneeBend(t*0.7)})},
   {dance:'Rezif · Persian Gulf', name:'Shoulder Line',
    text:'Hand on your neighbour\'s shoulder, stepping forward and back as one.',
    meaning:'The group becomes a single synchronized body.',
-   fn:t=>poseFrom({...M.oneArmUp(t*0.6),...M.sway(t,0.04)})},
+   fn:t=>poseFrom({...M.oneArmUp(t*0.8),...M.sideStep(t,2.4)})},
   {dance:'Sword dance · Persian Gulf', name:'Sword Overhead',
    text:'Swing the blade above the head to the rhythm of drums.',
    meaning:'Tools of conflict become a performance of honor.',
-   fn:t=>poseFrom(M.overhead(t))},
+   fn:t=>poseFrom({...M.overhead(t),...M.kneeLift(t,3.2)})},
   {dance:'Choub-Bazi · Lur tradition', name:'The Stick Guard',
    text:'Hold a defensive stance, circling, watching for an opening.',
    meaning:'Combat skill turned into agility, timing, intelligence.',
-   fn:t=>poseFrom({...M.pullChest(t*0.5),__shift:Math.sin(t*0.9)*0.05})},
+   fn:t=>poseFrom({...M.pullChest(t*0.5),...M.sideStep(t,1.6),__shift:Math.sin(t*0.9)*0.05})},
   {dance:'Handkerchief dance · Iran', name:'Scarves & Bent Knees',
    text:'Scarves above the head sweeping side to side, legs bending in turn.',
    meaning:'Movement made visible through color and flowing cloth.',
-   fn:t=>poseFrom({...M.wave(t),...M.kneeBend(t*0.7)})},
+   fn:t=>poseFrom({...M.wave(t),...M.kneeLift(t,3)})},
   {dance:'Rowing dance · Persian Gulf', name:'The Oar Circles',
    text:'Broad alternating arm circles, weight shifting side to side.',
    meaning:'The repetitive motion of rowing across open water.',
-   fn:t=>poseFrom({...M.armCircles(t),__shift:Math.sin(t*2)*0.05})},
+   fn:t=>poseFrom({...M.armCircles(t),...M.sideStep(t,2.6)})},
 
   // ---------------- TURKEY & AZERBAIJAN ----------------
   {dance:'Zeybek · Aegean Anatolia', name:'The Proud Stand',
@@ -1586,7 +1469,7 @@ const DANCE_MOVES = [
   {dance:'Zeybek · Aegean Anatolia', name:'Kneel and Rise',
    text:'Lower to one knee, chest lifted — then rise without breaking posture.',
    meaning:'Humility, then determination that overcomes hardship.',
-   fn:t=>poseFrom(M.kneeBend(t*0.6))},
+   fn:t=>poseFrom({...M.kneeBend(t*0.9),...M.armsOpen(t*0.8)})},
   {dance:'Zeybek · Aegean Anatolia', name:'The Slow Claim',
    text:'Rotate gradually with wide arms and steady footing.',
    meaning:'Claiming the surrounding space with confidence.',
@@ -1602,7 +1485,7 @@ const DANCE_MOVES = [
   {dance:'Azerbaijani dance', name:'On the Toes',
    text:'Rise tall on the tips of the toes, body stretched upward.',
    meaning:'Taller, lighter, faster — the proud elevated body.',
-   fn:t=>poseFrom(M.reach(t*0.8))},
+   fn:t=>poseFrom({...M.reach(t*1.0),...M.kneeLift(t,2.6)})},
   {dance:'Azerbaijani dance', name:'The Statue Freeze',
    text:'Circle slowly with expressive hands — then freeze when the music stops.',
    meaning:'The human body becomes humor and sculpture.',
@@ -1624,43 +1507,43 @@ const DANCE_MOVES = [
   {dance:'Errenzhuan · Northeast China', name:'Handkerchief & Fan',
    text:'Hips twist with the drum, wrists spin the handkerchief and flip the fan.',
    meaning:'Celebrating and praying for the harvest.',
-   fn:t=>poseFrom({...M.twist(t),...M.armCircles(t*1.2)})},
+   fn:t=>poseFrom({...M.twist(t),...M.armCircles(t*1.3),...M.kneeLift(t,3.6)})},
   {dance:'Flower Drum · China', name:'The Story Drum',
    text:'Strike the drum and rim alternately while swaying and gliding.',
    meaning:'Folk stories and the hardships of daily life, sung and drummed.',
-   fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06}})},
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.10,y:SHY+0.12+Math.abs(Math.sin(t*7))*0.06},right_wrist:{x:CXX+0.10,y:SHY+0.12+Math.abs(Math.cos(t*7))*0.06},...M.sideStep(t,2)})},
   {dance:'Yayue · Imperial ritual', name:'The Ritual Square',
    text:'Step forward, back, and turn in perfect uniform slowness.',
    meaning:'Hierarchical order; reverence for heaven, earth, ancestors.',
-   fn:t=>poseFrom(M.overhead(t*0.4))},
+   fn:t=>poseFrom({...M.overhead(t*0.4),...M.sideStep(t,0.9)})},
   {dance:'Nuo · Exorcism dance', name:'Mask Stomp',
    text:'Stomp heavily, swing arms wide in striking, driving gestures.',
    meaning:'Driving away plague demons; praying for safety and harvest.',
-   fn:t=>poseFrom(M.stomp(t))},
+   fn:t=>poseFrom({...M.stomp(t,4.5),...M.kneeLift(t,4.5)})},
   {dance:'Dragon dance · China', name:'The Dragon Body',
    text:'Rise and fall in sync, spiraling forward as one long body.',
    meaning:'Favorable weather, national peace, collective unity.',
-   fn:t=>poseFrom({...M.sway(t,0.07),...M.torsoArch(t*0.6)})},
+   fn:t=>poseFrom({...M.sideStep(t,2),...M.torsoArch(t*0.8)})},
   {dance:'Lion dance · Southern China', name:'The Lion Pounce',
    text:'Horse stance — leap, dodge, turn and pounce like the lion.',
    meaning:'Driving away evil, attracting fortune and prosperity.',
-   fn:t=>poseFrom({...M.kneeBend(t*1.2),...M.stomp(t*0.9)})},
+   fn:t=>poseFrom({...M.jump(t,2.4),...M.kneeBend(t*1.4)})},
   {dance:'Waist drum · Loess Plateau', name:'Ansai Drummers',
    text:'Leap, kick and twist while striking the waist drum, ribbons flying.',
    meaning:'The bold vitality of the plateau people.',
-   fn:t=>poseFrom({...M.stomp(t*1.1),...M.vibrate(t,0.008,12)})},
+   fn:t=>poseFrom({...M.stomp(t*1.2,5),...M.kick(t,4),...M.vibrate(t,0.010,14)})},
   {dance:'Peacock dance · Dai people', name:'The Peacock',
    text:'Three-bend posture, wavelike arms, tiny light steps.',
    meaning:'Good fortune, happiness, reverence for nature.',
-   fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10+Math.sin(t*2)*0.04},right_wrist:{x:CXX+0.26,y:SHY-0.10-Math.sin(t*2)*0.04},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04}})},
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.26,y:SHY-0.10+Math.sin(t*2)*0.04},right_wrist:{x:CXX+0.26,y:SHY-0.10-Math.sin(t*2)*0.04},left_elbow:{x:CXX-0.16,y:SHY-0.04},right_elbow:{x:CXX+0.16,y:SHY-0.04},...M.sideStep(t,1.6)})},
   {dance:'Bonfire circle · China', name:'Around the Fire',
    text:'Hands joined in a circle, stomping counterclockwise, singing.',
    meaning:'Harvest, social joy, the village\'s peace and prosperity.',
-   fn:t=>poseFrom({...M.sway(t,0.06),...M.kneeBend(t*0.8)})},
+   fn:t=>poseFrom({...M.sideStep(t,2.4),...M.stomp(t,4)})},
   {dance:'Tea-picking dance · China', name:'Mincing Tea Steps',
    text:'Light tiny steps, bending to pluck leaves, chasing butterflies.',
    meaning:'The vivid tea-harvest life of mountain villages.',
-   fn:t=>poseFrom({...M.sway(t*1.3,0.03),...M.armCircles(t*0.9)})},
+   fn:t=>poseFrom({...M.sideStep(t,3),...M.armCircles(t*1.1)})},
 ];
 
 let moveIdx = 0, move0 = null;
@@ -1763,7 +1646,7 @@ function wanderOffset(t) {
 
 // --- Inertia smoothing for lifelike weight ---
 let smoothPose = null;
-const SMOOTH = 0.16;
+const SMOOTH = 0.30;
 function smoothToward(target) {
   if (!smoothPose) {
     smoothPose = {};
@@ -1801,21 +1684,45 @@ function currentMovePose(t) {
   const wo = wanderOffset(t);
   const moved = {};
   for (const k in pose) moved[k] = { x: pose[k].x + wo.x, y: pose[k].y + wo.y };
-  return smoothToward(moved);
+  const smoothed = smoothToward(moved);
+
+  // Natural imperfection: each joint gets its own tiny, slow drift phase so
+  // the whole body doesn't move in perfect lockstep like a machine — this is
+  // the difference between a dancer and a servo motor.
+  const out = {};
+  for (const k in smoothed) {
+    const ph = jointPhase(k);
+    const jx = Math.sin(t*1.7 + ph)*0.0028 + Math.sin(t*0.55 + ph*1.3)*0.0018;
+    const jy = Math.cos(t*1.35 + ph*0.85)*0.0024;
+    out[k] = { x: smoothed[k].x + jx, y: smoothed[k].y + jy };
+  }
+  return out;
 }
 function currentMoveName() { return DANCE_MOVES[moveIdx].name; }
 
-// Stick-LINE figure matching the yellow sketch: a single spine line, with
-// arms and legs branching off — NO torso rectangle. Bendable, elegant.
-// Uses mid-shoulder and mid-hip as spine joints so the body reads as lines.
+// Deterministic pseudo-random phase per joint name, so the jitter above is
+// stable frame-to-frame but different per limb.
+const _jointPhaseCache = {};
+function jointPhase(key) {
+  if (_jointPhaseCache[key] == null) {
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash*31 + key.charCodeAt(i)) >>> 0;
+    _jointPhaseCache[key] = (hash % 1000) / 1000 * Math.PI * 2;
+  }
+  return _jointPhaseCache[key];
+}
+
+// Stick-LINE figure: a single spine line, with arms and legs branching off —
+// no torso rectangle. Bendable, elegant. Supports "align": repositioning and
+// rescaling the whole figure so it can stand where/how big the participant
+// stands (detected from camera), instead of always sitting at frame center.
+// opts.ctx lets the same drawer be reused on a different canvas (bye screen).
 function drawStickLine(joints, rect, opts) {
-  const sc = opts.sc || 1, spreadY = opts.spreadY || 1;
-  const px = (nx) => {
-    let x = 0.5 + (nx - 0.5) * sc;
-    x = opts.mirror ? (1 - x) : x;
-    return rect.x + x * rect.w;
-  };
-  const py = (ny) => rect.y + (0.5 + (ny - 0.5) * spreadY) * rect.h;
+  const c = opts.ctx || ctx;
+  const align = opts.align || { cx: CXX, cy: HIPY, scale: 1 };
+  const scaleMul = (opts.sc || 1) * (align.scale || 1);
+  const px = (nx) => rect.x + (align.cx + (nx - CXX) * scaleMul) * rect.w;
+  const py = (ny) => rect.y + (align.cy + (ny - HIPY) * scaleMul) * rect.h;
   const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
   const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
 
@@ -1823,13 +1730,15 @@ function drawStickLine(joints, rect, opts) {
   const neck = mid(ls, rs);
   const pelvis = mid(lh, rh);
 
-  const seg = (a, b) => { if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); };
+  const seg = (a, b) => { if(!a||!b) return; c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); };
 
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = opts.color;
-  ctx.lineWidth = opts.width;
+  c.save();
+  c.beginPath(); c.rect(rect.x, rect.y, rect.w, rect.h); c.clip();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.strokeStyle = opts.color;
+  c.lineWidth = opts.width;
+  c.shadowColor = 'rgba(0,0,0,0.55)';
+  c.shadowBlur = 7;
 
   // spine (neck -> pelvis)
   seg(neck, pelvis);
@@ -1846,11 +1755,13 @@ function drawStickLine(joints, rect, opts) {
 
   // head (small circle above neck, at nose)
   const nose = P('nose');
-  if (nose) { ctx.beginPath(); ctx.arc(nose.x, nose.y, opts.headR||14, 0, Math.PI*2); ctx.stroke(); }
+  if (nose) { c.beginPath(); c.arc(nose.x, nose.y, (opts.headR||14)*scaleMul, 0, Math.PI*2); c.stroke(); }
   // neck link to head
   if (nose && neck) seg(nose, neck);
 
-  ctx.restore();
+  c.restore();
+  // Report where the head landed on screen so the caller can place text above it
+  return nose || neck || pelvis || { x: rect.x + rect.w/2, y: rect.y + rect.h*0.25 };
 }
 
 // Draw the (optionally filtered) camera video into a rect, mirrored.
@@ -1919,34 +1830,6 @@ function drawFaceBlurRect(joints, rect) {
   ctx.restore();
 }
 
-// Sharper, clearer render for the participant's own tracked body —
-// stays legible/technical since this is feedback, not the "spirit" guide
-function drawUserSkeleton(joints, w, h) {
-  const px = (nx) => (1 - nx) * w; // mirrored
-  ctx.save();
-  ctx.strokeStyle = 'rgba(47,111,79,0.85)';
-  ctx.fillStyle = 'rgba(47,111,79,0.85)';
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
-
-  SKELETON_PAIRS.forEach(([a, b]) => {
-    const ja = joints[a], jb = joints[b];
-    if (!ja || !jb) return;
-    ctx.beginPath();
-    ctx.moveTo(px(ja.x), ja.y * h);
-    ctx.lineTo(px(jb.x), jb.y * h);
-    ctx.stroke();
-  });
-  const faceKp = ['nose','left_eye','right_eye','left_ear','right_ear'];
-  Object.entries(joints).forEach(([name, j]) => {
-    if (faceKp.includes(name)) return; // covered by robot face
-    ctx.beginPath();
-    ctx.arc(px(j.x), j.y * h, 4, 0, 2 * Math.PI);
-    ctx.fill();
-  });
-  ctx.restore();
-}
-
 function keypointsToNamed(keypoints) {
   const map = {};
   keypoints.forEach(kp => {
@@ -1957,82 +1840,131 @@ function keypointsToNamed(keypoints) {
   return map;
 }
 
+// --- Alignment: where + how big the guide figure should stand, derived
+// from the participant's detected position. Smoothed so it doesn't jitter.
+// Falls back to a centered, gently wandering figure when nobody is seen.
+const TEMPLATE_SHOULDER_W = 0.18;
+let currentAlign = { cx: CXX, cy: HIPY, scale: 1 };
+const ALIGN_SMOOTH = 0.12;
+function updateAlign(named, okB) {
+  let target;
+  if (okB) {
+    const ls = named.left_shoulder, rs = named.right_shoulder;
+    const lh = named.left_hip, rh = named.right_hip;
+    const shoulderW = Math.hypot(ls.x - rs.x, ls.y - rs.y) || TEMPLATE_SHOULDER_W;
+    const shoulderCX = (ls.x + rs.x) / 2, shoulderCY = (ls.y + rs.y) / 2;
+    const hipCX = (lh && rh) ? (lh.x + rh.x) / 2 : shoulderCX;
+    const hipCY = (lh && rh) ? (lh.y + rh.y) / 2 : shoulderCY + 0.22;
+    let scale = shoulderW / TEMPLATE_SHOULDER_W;
+    scale = Math.max(0.55, Math.min(2.3, scale));
+    target = { cx: 1 - hipCX, cy: hipCY, scale }; // mirrored to match mirrored video
+  } else {
+    target = { cx: CXX, cy: HIPY, scale: 1 };
+  }
+  currentAlign.cx += (target.cx - currentAlign.cx) * ALIGN_SMOOTH;
+  currentAlign.cy += (target.cy - currentAlign.cy) * ALIGN_SMOOTH;
+  currentAlign.scale += (target.scale - currentAlign.scale) * ALIGN_SMOOTH;
+}
+
+// Gentle idle breathing pose for when no session is running yet.
+function idleBreathePose(t) {
+  const b = Math.sin(t * 1.1) * 0.014;
+  return poseFrom({
+    nose: { x: CXX + Math.sin(t*0.5)*0.01, y: 0.28 - b*0.5 },
+    left_shoulder: { x: CXX-0.09, y: SHY - b }, right_shoulder: { x: CXX+0.09, y: SHY - b },
+    left_elbow: { x: CXX-0.15, y: SHY+0.10 - b*0.6 }, right_elbow: { x: CXX+0.15, y: SHY+0.10 - b*0.6 },
+  });
+}
+
+const wrapText = (text, maxW, font) => {
+  ctx.font = font;
+  const words = (text||'').split(' ');
+  const lines = []; let line = '';
+  for (const wd of words) {
+    const test = line ? line + ' ' + wd : wd;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+};
+
 async function renderLoop() {
   if (!running) return;
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
   const now = performance.now() / 1000;
+  const rect = { x: 0, y: 0, w, h };
 
-  // Always split left | right (landscape / laptop friendly)
-  let targetRect = { x: 0, y: 0, w: w/2, h };
-  let camRect    = { x: w/2, y: 0, w: w/2, h };
-  const landscape = true;
+  // --- Full-bleed camera background ---
+  drawCameraToRect(rect, faceFilterMode);
 
-  // --- Target panel: clean background ---
-  ctx.save();
-  ctx.fillStyle = '#12140f';
-  ctx.fillRect(targetRect.x, targetRect.y, targetRect.w, targetRect.h);
-  ctx.restore();
+  // --- Detect the participant, so the guide can stand where they stand ---
+  let named = null, okB = false;
+  try {
+    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
+    if (poses[0]) {
+      named = keypointsToNamed(poses[0].keypoints);
+      okB = !!(named.left_shoulder && named.right_shoulder && (named.left_hip || named.right_hip));
+      if (faceFilterMode === 'pixel') drawFaceBlurRect(named, rect);
+    }
+  } catch (e) { /* skip frame on transient error */ }
+  updateAlign(named, okB);
 
   if (!sessionActive) {
-    // Idle: prompt to start a new dance session
+    // Idle: one white teaching figure waits (aligned to you if you're already
+    // in frame), with a prompt to start.
+    const idlePose = idleBreathePose(now);
+    drawStickLine(idlePose, rect, { color: '#ffffff', width: 4, headR: 16, align: currentAlign });
     ctx.save();
     ctx.textAlign = 'center';
-    const icx = targetRect.x + targetRect.w/2, icy = targetRect.y + targetRect.h/2;
+    const icx = w/2, icy = h * 0.18;
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 8;
     ctx.fillStyle = 'rgba(255,255,255,0.96)';
     ctx.font = '700 26px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('Tap to Dance', icx, icy - 16);
+    ctx.fillText('Tap to Dance', icx, icy);
     ctx.fillStyle = 'rgba(255,210,120,0.95)';
     ctx.font = '500 18px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('Tippen zum Tanzen', icx, icy + 14);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText('Tippen zum Tanzen', icx, icy + 30);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText('1 minute · random moves · with beat', icx, icy + 46);
+    ctx.fillText('1 minute · random moves · with beat', icx, icy + 60);
     ctx.restore();
   } else {
-    // Active session: check time
     const remain = SESSION_LENGTH - (now - sessionStart);
     if (remain <= 0) {
       endSession();
     } else {
       const movePose = currentMovePose(now);
-      drawStickLine(movePose, targetRect, { mirror:false, width:4, color:'rgba(226,34,54,0.95)', headR:16, sc:1.1, spreadY:1.3 });
-      // countdown top-right of target panel
+      const headPos = drawStickLine(movePose, rect, { color: '#ffffff', width: 4, headR: 16, align: currentAlign });
+
+      // countdown, top-right of screen
       ctx.save();
       ctx.textAlign = 'right';
-      ctx.fillStyle = remain < 10 ? 'rgba(255,120,120,0.95)' : 'rgba(255,255,255,0.8)';
+      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 6;
+      ctx.fillStyle = remain < 10 ? 'rgba(255,120,120,0.95)' : 'rgba(255,255,255,0.85)';
       ctx.font = '700 22px -apple-system, sans-serif';
-      ctx.fillText(Math.ceil(remain) + 's', targetRect.x + targetRect.w - 16, targetRect.y + 46);
+      ctx.fillText(Math.ceil(remain) + 's', w - 16, 46);
       ctx.restore();
-      // guidance: only the white instruction + blue region line
+
+      // instruction text sits just ABOVE the teaching figure's head
       ctx.save();
       ctx.textAlign = 'center';
-      const gcx = targetRect.x + targetRect.w/2;
-      const gy = targetRect.y + 40;
       const mv = DANCE_MOVES[moveIdx];
-      const wrap = (text, maxW, font) => {
-        ctx.font = font;
-        const words = (text||'').split(' ');
-        const lines = []; let line = '';
-        for (const wd of words) {
-          const test = line ? line + ' ' + wd : wd;
-          if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
-          else line = test;
-        }
-        if (line) lines.push(line);
-        return lines;
-      };
-      const maxW = Math.min(targetRect.w - 48, 620);
-      const fText = '600 24px -apple-system, "Segoe UI", sans-serif';
-      const fDance = '600 17px -apple-system, sans-serif';
-      const textLines = wrap(mv.text, maxW, fText);
-      const totalH = 20 + textLines.length*30 + 26 + 14;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(gcx - maxW/2 - 16, gy - 26, maxW + 32, totalH);
-      let ty = gy + 4;
+      const maxW = Math.min(w - 48, 560);
+      const fText = '600 22px -apple-system, "Segoe UI", sans-serif';
+      const fDance = '600 16px -apple-system, sans-serif';
+      const textLines = wrapText(mv.text, maxW, fText);
+      const totalH = 20 + textLines.length*28 + 24 + 12;
+      const gcx = Math.max(maxW/2 + 16, Math.min(w - maxW/2 - 16, headPos.x));
+      let boxTop = headPos.y - 34 - totalH;
+      boxTop = Math.max(54, boxTop);
+      ctx.fillStyle = 'rgba(0,0,0,0.52)';
+      ctx.fillRect(gcx - maxW/2 - 16, boxTop, maxW + 32, totalH);
+      let ty = boxTop + 26;
       ctx.fillStyle = 'rgba(255,255,255,0.97)';
       ctx.font = fText;
-      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 30; }
+      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 28; }
       ctx.fillStyle = 'rgba(150,215,255,0.92)';
       ctx.font = fDance;
       ctx.fillText(mv.dance, gcx, ty + 2);
@@ -2040,48 +1972,21 @@ async function renderLoop() {
     }
   }
 
-  // --- Camera panel: (filtered) video + your green figure ---
-  drawCameraToRect(camRect, faceFilterMode);
-  try {
-    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
-    if (poses[0]) {
-      const named = keypointsToNamed(poses[0].keypoints);
-      if (faceFilterMode === 'pixel') drawFaceBlurRect(named, camRect);
-      drawStickLine(named, camRect, { mirror:true, width:5, color:'rgba(34,160,90,0.95)', headR:14, sc:1, spreadY:1 });
-      // hint if body not fully visible
-      const okB = named.left_shoulder && named.right_shoulder && (named.left_hip||named.right_hip);
-      if (!okB) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(camRect.x+10, camRect.y+camRect.h-46, 220, 34);
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.font = '600 13px -apple-system, sans-serif';
-        ctx.fillText('Step back — show your body', camRect.x+18, camRect.y+camRect.h-24);
-        ctx.restore();
-      }
-    }
-  } catch (e) {
-    // skip frame on transient error
+  if (!okB) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(w/2 - 130, h - 56, 260, 34);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.font = '600 13px -apple-system, sans-serif';
+    ctx.fillText('Step back — show your whole body', w/2, h - 34);
+    ctx.restore();
   }
-
-  // --- Divider + labels ---
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  if (landscape) { ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h); }
-  else { ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); }
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
-  ctx.font = '600 12px -apple-system, sans-serif';
-  ctx.fillText('COPY THIS', targetRect.x + 12, targetRect.y + 22);
-  ctx.fillText('YOU', camRect.x + 12, camRect.y + 22);
-  ctx.restore();
 
   requestAnimationFrame(renderLoop);
 }
 
-startBtn.addEventListener('click', async () => {
+yesBtn.addEventListener('click', async () => {
   try {
     startScreen.classList.add('hidden');
     stage.classList.remove('hidden');
@@ -2104,6 +2009,29 @@ startBtn.addEventListener('click', async () => {
     setStatus(msg, 'error');
     console.error(err);
   }
+});
+
+// --- No: no camera needed, just a friendly white figure waving goodbye ---
+let byeRunning = false;
+function byeLoop() {
+  if (!byeRunning) return;
+  const w = byeCanvas.width, h = byeCanvas.height;
+  byeCtx.clearRect(0, 0, w, h);
+  const t = performance.now() / 1000;
+  const pose = poseFrom(M.wave(t * 0.6));
+  drawStickLine(pose, { x: 0, y: 0, w, h }, {
+    ctx: byeCtx, color: '#ffffff', width: 4, headR: 16,
+    align: { cx: CXX, cy: HIPY, scale: 1.15 }
+  });
+  requestAnimationFrame(byeLoop);
+}
+
+noBtn.addEventListener('click', () => {
+  startScreen.classList.add('hidden');
+  byeScreen.classList.remove('hidden');
+  resizeCanvas();
+  byeRunning = true;
+  byeLoop();
 });
 </script>
 
