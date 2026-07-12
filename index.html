@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Dance Mirror — Proof of Concept</title>
+<!--
+  DEVICE COMPATIBILITY
+  This is a single self-contained HTML file — no build step, no server-side
+  logic. It runs identically on:
+    - Phone / tablet browsers (touch tap-to-start, front camera)
+    - Laptop / PC browsers (mouse click, any webcam)
+    - Raspberry Pi (Chromium in kiosk mode) + USB webcam, for the exhibition
+  All pose detection (TensorFlow.js + MoveNet) runs client-side in the
+  browser — nothing is uploaded, nothing needs a network connection once the
+  page and model have loaded once. Camera access uses a soft "facingMode"
+  preference (ignored by plain USB/laptop webcams, honored on phones/tablets)
+  with a plain-video fallback for cameras that reject the constraint outright.
+-->
 <style>
   :root {
     --ink: #0d0f0c;
@@ -230,7 +243,7 @@
 <div id="startScreen">
   <h1>Dance Mirror</h1>
   <p class="askText">Can I borrow your body for a dance?</p>
-  <p class="subText">Your face is never shown or recorded. Everything runs offline on your phone.</p>
+  <p class="subText">Your face is never shown or recorded. Everything runs offline, right here on this device.</p>
   <div id="consentBtns">
     <button id="yesBtn" class="consentBtn yes">Yes</button>
     <button id="noBtn" class="consentBtn no">No</button>
@@ -473,10 +486,19 @@ canvas.addEventListener('click', () => {
 });
 
 async function setupCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-    audio: false
-  });
+  // Works across phone, tablet, laptop/PC webcams, and a Raspberry Pi + USB
+  // webcam (exhibition rig). facingMode is only meaningful on phones/tablets;
+  // on a plain webcam it's ignored, not rejected. If a device is picky about
+  // the constraint object entirely, fall back to a bare video:true request.
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+  } catch (e) {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  }
   video.srcObject = stream;
   return new Promise((resolve, reject) => {
     video.onloadedmetadata = async () => {
@@ -1830,6 +1852,42 @@ function drawFaceBlurRect(joints, rect) {
   ctx.restore();
 }
 
+// Direct green tracking line on the participant's own body — maps their
+// real detected joints 1:1 (mirrored), separate from the white guide figure
+// which is repositioned/rescaled to stand near them. This is the feedback
+// line: "here is exactly where the camera sees your body right now."
+function drawUserTracker(joints, rect, opts) {
+  const c = opts.ctx || ctx;
+  const px = (nx) => rect.x + (1 - nx) * rect.w; // mirror to match mirrored video
+  const py = (ny) => rect.y + ny * rect.h;
+  const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
+  const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
+
+  const ls=P('left_shoulder'), rs=P('right_shoulder'), lh=P('left_hip'), rh=P('right_hip');
+  const neck = mid(ls, rs), pelvis = mid(lh, rh);
+  const seg = (a, b) => { if(!a||!b) return; c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); };
+
+  c.save();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.strokeStyle = opts.color || 'rgba(34,190,110,0.9)';
+  c.fillStyle = opts.color || 'rgba(34,190,110,0.9)';
+  c.lineWidth = opts.width || 4;
+
+  seg(neck, pelvis);
+  seg(ls, rs);
+  seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
+  seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
+  seg(lh, rh);
+  seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
+  seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
+
+  const nose = P('nose');
+  if (nose) { c.beginPath(); c.arc(nose.x, nose.y, 6, 0, Math.PI*2); c.fill(); }
+  if (nose && neck) seg(nose, neck);
+
+  c.restore();
+}
+
 function keypointsToNamed(keypoints) {
   const map = {};
   keypoints.forEach(kp => {
@@ -1910,6 +1968,7 @@ async function renderLoop() {
     }
   } catch (e) { /* skip frame on transient error */ }
   updateAlign(named, okB);
+  if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 4 });
 
   if (!sessionActive) {
     // Idle: one white teaching figure waits (aligned to you if you're already
