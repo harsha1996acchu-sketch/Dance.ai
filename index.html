@@ -392,18 +392,18 @@ function toCropped(nx, ny) {
 function basePose(over) {
   const p = {
     nose:           { x: CXX,        y: 0.28 },
-    left_shoulder:  { x: CXX-0.09,   y: SHY },
-    right_shoulder: { x: CXX+0.09,   y: SHY },
+    left_shoulder:  { x: CXX-0.075,  y: SHY },
+    right_shoulder: { x: CXX+0.075,  y: SHY },
     left_elbow:     { x: CXX-0.15,   y: SHY+0.10 },
     right_elbow:    { x: CXX+0.15,   y: SHY+0.10 },
     left_wrist:     { x: CXX-0.17,   y: SHY+0.20 },
     right_wrist:    { x: CXX+0.17,   y: SHY+0.20 },
-    left_hip:       { x: CXX-0.08,   y: HIPY },
-    right_hip:      { x: CXX+0.08,   y: HIPY },
-    left_knee:      { x: CXX-0.09,   y: HIPY+0.16 },
-    right_knee:     { x: CXX+0.09,   y: HIPY+0.16 },
-    left_ankle:     { x: CXX-0.10,   y: HIPY+0.32 },
-    right_ankle:    { x: CXX+0.10,   y: HIPY+0.32 },
+    left_hip:       { x: CXX-0.065,  y: HIPY },
+    right_hip:      { x: CXX+0.065,  y: HIPY },
+    left_knee:      { x: CXX-0.08,   y: HIPY+0.16 },
+    right_knee:     { x: CXX+0.08,   y: HIPY+0.16 },
+    left_ankle:     { x: CXX-0.085,  y: HIPY+0.32 },
+    right_ankle:    { x: CXX+0.085,  y: HIPY+0.32 },
   };
   if (over) for (const k in over) p[k] = over[k];
   return p;
@@ -1397,7 +1397,7 @@ const DANCE_MOVES = [
   {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
    text:'Spin with arms out, eyes fixed on one point.',
    meaning:'Dissolving the self; devotion that never loses sight of the divine.',
-   fn:t=>poseFrom({...M.spin(t,4.5),__spin:t*3.2})},
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.30,y:SHY-0.02},right_wrist:{x:CXX+0.30,y:SHY-0.02},left_elbow:{x:CXX-0.20,y:SHY},right_elbow:{x:CXX+0.20,y:SHY},__spin:t*3.2})},
   {dance:'Kathak · North India', name:'Tatkar — Conversation of Feet',
    text:'Speak with your feet: heel, ball, heel — upper body calm.',
    meaning:'A living dialogue with Tala, the cosmic pulse.',
@@ -1429,7 +1429,7 @@ const DANCE_MOVES = [
   {dance:'Manipuri · Manipur', name:'The Circular Flow',
    text:'Turn slowly like the earth rotating, a wave through the arms.',
    meaning:'Time is circular; every ending contains a beginning.',
-   fn:t=>poseFrom({...M.spin(t,0.8),...M.armCircles(t*0.6),__spin:t*0.7})},
+   fn:t=>poseFrom({...M.armCircles(t*0.6),__spin:t*0.7})},
   {dance:'Manipuri · Manipur', name:'Hands Like Water',
    text:'Fingers curl and open in exchange, wrists free, like the tide.',
    meaning:'The hands are not stating — they are singing nature.',
@@ -1553,7 +1553,7 @@ const DANCE_MOVES = [
   {dance:'Zeybek · Aegean Anatolia', name:'The Slow Claim',
    text:'Rotate gradually with wide arms and steady footing.',
    meaning:'Claiming the surrounding space with confidence.',
-   fn:t=>poseFrom({...M.spin(t,1),...M.armsOpen(t*0.5),__spin:t*0.5})},
+   fn:t=>poseFrom({...M.armsOpen(t*0.5),__spin:t*0.5})},
   {dance:'Sema · Mevlevi Türkiye', name:'Arms Crossed — The Beginning',
    text:'Head inclined, arms crossed over the chest.',
    meaning:'The unity of God; the journey\'s spiritual beginning.',
@@ -1561,7 +1561,7 @@ const DANCE_MOVES = [
   {dance:'Sema · Mevlevi Türkiye', name:'The Whirling',
    text:'Turn continuously around your own axis, right palm up, left palm down.',
    meaning:'Receiving divine grace and passing it to the world.',
-   fn:t=>poseFrom({...M.spin(t,1.6),right_wrist:{x:CXX+0.14,y:SHY-0.18},left_wrist:{x:CXX-0.14,y:SHY+0.16},__spin:t*1.3})},
+   fn:t=>poseFrom({right_wrist:{x:CXX+0.14,y:SHY-0.18},left_wrist:{x:CXX-0.14,y:SHY+0.16},right_elbow:{x:CXX+0.18,y:SHY-0.06},left_elbow:{x:CXX-0.18,y:SHY+0.06},__spin:t*1.3})},
   {dance:'Azerbaijani dance', name:'On the Toes',
    text:'Rise tall on the tips of the toes, body stretched upward.',
    meaning:'Taller, lighter, faster — the proud elevated body.',
@@ -1579,11 +1579,11 @@ const DANCE_MOVES = [
   {dance:'Court dance · China', name:'Immortal\'s Pivot',
    text:'A weightless single-foot pivot turn, posture lifted, sleeves flaring.',
    meaning:'Depicting how the immortals live in the heavens.',
-   fn:t=>poseFrom({...M.spin(t,2.2),__spin:t*1.6})},
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.24,y:SHY-0.08},right_wrist:{x:CXX+0.24,y:SHY-0.08},left_elbow:{x:CXX-0.17,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY-0.02},__spin:t*1.6})},
   {dance:'Hu Xuan · Western Regions', name:'Spinning on the Mat',
    text:'Rapid continuous spinning on one foot, arms high, skirt flaring.',
    meaning:'Splendid amusement for the imperial banquet.',
-   fn:t=>poseFrom({...M.spin(t,6),__spin:t*3.6})},
+   fn:t=>poseFrom({left_wrist:{x:CXX-0.14,y:0.20},right_wrist:{x:CXX+0.14,y:0.20},left_elbow:{x:CXX-0.16,y:SHY-0.06},right_elbow:{x:CXX+0.16,y:SHY-0.06},__spin:t*3.6})},
   {dance:'Errenzhuan · Northeast China', name:'Handkerchief & Fan',
    text:'Hips twist with the drum, wrists spin the handkerchief and flip the fan.',
    meaning:'Celebrating and praying for the harvest.',
@@ -1842,7 +1842,7 @@ function drawStickLine(joints, rect, opts) {
   // against a white wall as much as a dark room.
   if (opts.outline !== false) {
     c.strokeStyle = opts.outlineColor || 'rgba(10,12,10,0.85)';
-    c.lineWidth = opts.width + 5;
+    c.lineWidth = opts.width + 3;
     c.shadowBlur = 0;
     drawSkeleton();
   }
@@ -2062,13 +2062,13 @@ async function renderLoop() {
     }
   } catch (e) { /* skip frame on transient error */ }
   updateAlign(named, okB);
-  if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 4 });
+  if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 3.2 });
 
   if (!sessionActive) {
     // Idle: one white teaching figure waits (aligned to you if you're already
     // in frame), with a prompt to start.
     const idlePose = idleBreathePose(now);
-    drawStickLine(idlePose, rect, { color: GUIDE_COLOR, width: 4, headR: 16, align: currentAlign });
+    drawStickLine(idlePose, rect, { color: GUIDE_COLOR, width: 3.2, headR: 13, align: currentAlign });
     ctx.save();
     ctx.textAlign = 'center';
     const icx = w/2, icy = h * 0.18;
@@ -2089,7 +2089,7 @@ async function renderLoop() {
       endSession();
     } else {
       const movePose = currentMovePose(now);
-      const headPos = drawStickLine(movePose, rect, { color: GUIDE_COLOR, width: 4, headR: 16, align: currentAlign, spin: movePose.__spin || 0 });
+      const headPos = drawStickLine(movePose, rect, { color: GUIDE_COLOR, width: 3.2, headR: 13, align: currentAlign, spin: movePose.__spin || 0 });
 
       // countdown, top-right of screen
       ctx.save();
@@ -2174,7 +2174,7 @@ function byeLoop() {
   const t = performance.now() / 1000;
   const pose = poseFrom(M.wave(t * 0.6));
   drawStickLine(pose, { x: 0, y: 0, w, h }, {
-    ctx: byeCtx, color: GUIDE_COLOR, width: 4, headR: 16,
+    ctx: byeCtx, color: GUIDE_COLOR, width: 3.2, headR: 13,
     align: { cx: CXX, cy: HIPY, scale: 1.15 }
   });
   requestAnimationFrame(byeLoop);
