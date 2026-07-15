@@ -1355,9 +1355,9 @@ const M = {
            right_knee:{x:CXX+0.09,y:HIPY+0.16-R*0.12},right_ankle:{x:CXX+0.10,y:HIPY+0.32-R*0.16}};},
   // wide leg step side to side
   sideStep:(t,s=2.5)=>{const p=Math.sin(t*s);
-    return{left_knee:{x:CXX-0.09+p*0.06,y:HIPY+0.16},left_ankle:{x:CXX-0.12+p*0.10,y:HIPY+0.32},
-           right_knee:{x:CXX+0.09+p*0.06,y:HIPY+0.16},right_ankle:{x:CXX+0.12+p*0.10,y:HIPY+0.32},
-           left_hip:{x:CXX-0.08+p*0.03,y:HIPY},right_hip:{x:CXX+0.08+p*0.03,y:HIPY}};},
+    return{left_knee:{x:CXX-0.08+p*0.04,y:HIPY+0.16},left_ankle:{x:CXX-0.10+p*0.06,y:HIPY+0.32},
+           right_knee:{x:CXX+0.08+p*0.04,y:HIPY+0.16},right_ankle:{x:CXX+0.10+p*0.06,y:HIPY+0.32},
+           left_hip:{x:CXX-0.065+p*0.025,y:HIPY},right_hip:{x:CXX+0.065+p*0.025,y:HIPY}};},
   // hip strike with supporting leg lift
   hipStrike:(t)=>{const s=Math.sin(t*5),hip=s*0.06,lift=Math.max(0,s);
     return{left_hip:{x:CXX-0.08+hip,y:HIPY},right_hip:{x:CXX+0.08+hip,y:HIPY},
@@ -1705,6 +1705,8 @@ function startSession(t) {
   move0 = t;
   sessionActive = true;
   smoothPose = null;
+  smoothVel = null;
+  lastFrameT = null;
   startBeat();
 }
 function endSession() {
@@ -1724,21 +1726,64 @@ function wanderOffset(t) {
   return { x: wx, y: wy + bob };
 }
 
-// --- Inertia smoothing for lifelike weight ---
-let smoothPose = null;
-const SMOOTH = 0.30;
-function smoothToward(target) {
+// --- Weighted, spring-based motion (replaces plain lerp) ---
+// Each joint gets a relative mass — a rough 60kg body's weight distribution:
+// the pelvis/hips carry the most mass and move slowest/heaviest, wrists are
+// light and quick, matching how a real body actually accelerates its parts.
+const JOINT_WEIGHT = {
+  nose: 0.9,
+  left_shoulder: 1.3, right_shoulder: 1.3,
+  left_elbow: 0.7, right_elbow: 0.7,
+  left_wrist: 0.45, right_wrist: 0.45,
+  left_hip: 1.8, right_hip: 1.8,
+  left_knee: 0.9, right_knee: 0.9,
+  left_ankle: 0.55, right_ankle: 0.55,
+};
+const BASE_STIFFNESS = 55;
+const DAMP_RATIO = 0.62; // <1 = a little overshoot/settle, like real momentum
+
+let smoothPose = null, smoothVel = null, lastFrameT = null;
+function springToward(target, dt) {
   if (!smoothPose) {
-    smoothPose = {};
-    for (const k in target) smoothPose[k] = { x: target[k].x, y: target[k].y };
+    smoothPose = {}; smoothVel = {};
+    for (const k in target) { smoothPose[k] = { x: target[k].x, y: target[k].y }; smoothVel[k] = { x: 0, y: 0 }; }
     return smoothPose;
   }
   for (const k in target) {
-    if (!smoothPose[k]) smoothPose[k] = { x: target[k].x, y: target[k].y };
-    smoothPose[k].x += (target[k].x - smoothPose[k].x) * SMOOTH;
-    smoothPose[k].y += (target[k].y - smoothPose[k].y) * SMOOTH;
+    if (!smoothPose[k]) { smoothPose[k] = { x: target[k].x, y: target[k].y }; smoothVel[k] = { x: 0, y: 0 }; }
+    const stiff = BASE_STIFFNESS / (JOINT_WEIGHT[k] || 1);
+    const damp = 2 * Math.sqrt(stiff) * DAMP_RATIO;
+    const dx = target[k].x - smoothPose[k].x, dy = target[k].y - smoothPose[k].y;
+    const ax = dx*stiff - smoothVel[k].x*damp;
+    const ay = dy*stiff - smoothVel[k].y*damp;
+    smoothVel[k].x += ax*dt; smoothVel[k].y += ay*dt;
+    smoothPose[k].x += smoothVel[k].x*dt; smoothPose[k].y += smoothVel[k].y*dt;
   }
   return smoothPose;
+}
+
+// --- Counterbalance: the reason a real body never looks weightless ---
+// When one leg lifts, real weight has to go somewhere — the hips and torso
+// shift over the still-planted leg, and the whole core dips slightly as it
+// takes the load. Nothing here decides to do that; it's just what a 60kg
+// body does to keep from falling over. This runs on every move, not just
+// the ones that were hand-written to include it.
+function applyCounterbalance(pose) {
+  const la = pose.left_ankle, ra = pose.right_ankle;
+  if (!la || !ra) return pose;
+  const baseAnkleY = HIPY + 0.32;
+  const leftLift = Math.max(0, baseAnkleY - la.y);
+  const rightLift = Math.max(0, baseAnkleY - ra.y);
+  const net = rightLift - leftLift; // >0: right leg is up, weight goes left
+  const shiftX = Math.max(-0.045, Math.min(0.045, -net * 0.85));
+  const dip = Math.min(0.022, Math.max(leftLift, rightLift) * 0.16);
+  if (!shiftX && !dip) return pose;
+  const out = {};
+  for (const k in pose) out[k] = { x: pose[k].x, y: pose[k].y };
+  ['left_hip','right_hip'].forEach(k => { if (out[k]) { out[k].x += shiftX; out[k].y += dip; } });
+  ['left_shoulder','right_shoulder'].forEach(k => { if (out[k]) out[k].x += shiftX*0.55; });
+  if (out.nose) out.nose.x += shiftX*0.3;
+  return out;
 }
 
 function currentMovePose(t) {
@@ -1767,7 +1812,11 @@ function currentMovePose(t) {
   const wo = wanderOffset(t);
   const moved = {};
   for (const k in pose) moved[k] = { x: pose[k].x + wo.x, y: pose[k].y + wo.y };
-  const smoothed = smoothToward(moved);
+  const balanced = applyCounterbalance(moved);
+
+  const dt = lastFrameT === null ? 1/60 : Math.max(0.0008, Math.min(0.05, t - lastFrameT));
+  lastFrameT = t;
+  const smoothed = springToward(balanced, dt);
 
   // Natural imperfection: each joint gets its own tiny, slow drift phase so
   // the whole body doesn't move in perfect lockstep like a machine — this is
@@ -2004,7 +2053,7 @@ function updateAlign(named, okB) {
     // not the uncropped raw camera frame.
     const dHip = toCropped(hipCX, hipCY);
     let scale = (shoulderW / camCrop.sw) / TEMPLATE_SHOULDER_W;
-    scale = Math.max(0.55, Math.min(2.3, scale));
+    scale = Math.max(0.55, Math.min(1.75, scale));
     let cx = 1 - dHip.x; // mirrored to match mirrored video
     if (partnerMode === 'left') cx -= 0.36 * scale;
     else if (partnerMode === 'right') cx += 0.36 * scale;
