@@ -216,6 +216,24 @@
   }
   #fsToggle:active { background: rgba(255,255,255,0.25); }
 
+  #partnerToggle {
+    position: absolute;
+    top: env(safe-area-inset-top, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 118px;
+    z-index: 12;
+    -webkit-appearance: none;
+    border: 1px solid rgba(255,201,74,0.55);
+    background: rgba(255,201,74,0.14);
+    color: #ffe4a3;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 20px;
+  }
+  #partnerToggle:active { background: rgba(255,201,74,0.28); }
+
   #danceProgressWrap {
     margin-bottom: 2px;
   }
@@ -265,6 +283,7 @@
   </div>
 
   <button id="filterToggle" class="hidden">Filter: Off</button>
+  <button id="partnerToggle" class="hidden">Partner: Overlap</button>
   <button id="fsToggle" class="hidden">⛶ Fullscreen</button>
 
   <video id="video" playsinline autoplay muted></video>
@@ -297,7 +316,13 @@ const danceProgressWrap = document.getElementById('danceProgressWrap');
 const danceProgressFill = document.getElementById('danceProgressFill');
 const danceTimeLabel = document.getElementById('danceTimeLabel');
 const filterToggle = document.getElementById('filterToggle');
+const partnerToggle = document.getElementById('partnerToggle');
 const fsToggle = document.getElementById('fsToggle');
+const PARTNER_LABELS = { align: 'Partner: Overlap', left: 'Partner: Stand Left', right: 'Partner: Stand Right' };
+partnerToggle.addEventListener('click', () => {
+  partnerMode = partnerMode === 'align' ? 'left' : partnerMode === 'left' ? 'right' : 'align';
+  partnerToggle.textContent = PARTNER_LABELS[partnerMode];
+});
 fsToggle.addEventListener('click', () => {
   const el = document.documentElement;
   if (!document.fullscreenElement) {
@@ -333,6 +358,34 @@ const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','righ
 
 // Base body layout constants
 const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
+// Warm amber reads clearly against a white gallery wall AND a dark room —
+// paired with the dark outline halo in drawStickLine, this is the fix for
+// "the white figure disappears against a white background."
+const GUIDE_COLOR = '#ffc94a';
+
+// The camera's native frame (e.g. 4:3 on a laptop webcam) rarely matches the
+// screen's aspect ratio (very tall on a phone in portrait). Previously the
+// raw video was stretched to fill the screen — squeezing/expanding the
+// picture. camCrop describes a "cover" crop window (in normalized 0..1
+// video-space) that fills the screen with NO distortion, matching CSS
+// object-fit:cover. Every place that maps a detected joint or draws the
+// video onto the canvas uses this same window, so the tracked skeleton
+// stays glued to the (now correctly proportioned) picture of the person.
+let camCrop = { sx: 0, sy: 0, sw: 1, sh: 1 };
+function updateCamCrop(rect) {
+  const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+  if (!vw || !vh || !rect.w || !rect.h) { camCrop = { sx:0, sy:0, sw:1, sh:1 }; return; }
+  const vAspect = vw / vh, rAspect = rect.w / rect.h;
+  let sw = 1, sh = 1, sx = 0, sy = 0;
+  if (vAspect > rAspect) { sw = rAspect / vAspect; sx = (1 - sw) / 2; }
+  else { sh = vAspect / rAspect; sy = (1 - sh) / 2; }
+  camCrop = { sx, sy, sw, sh };
+}
+// Map a raw normalized video-space point (0..1) through the current crop,
+// producing the normalized position within what's actually shown on screen.
+function toCropped(nx, ny) {
+  return { x: (nx - camCrop.sx) / camCrop.sw, y: (ny - camCrop.sy) / camCrop.sh };
+}
 
 // Library of named keyframe poses. Each returns a full joint map.
 // Coordinates are normalized (0-1). cx offset lets a pose lean/shift.
@@ -1319,13 +1372,18 @@ const M = {
 };
 
 // Build a pose from a primitive result, applying optional global __shift.
+// __spin carries a rotation angle (radians) separately — it's attached as a
+// non-enumerable property so it rides along through the joint dict without
+// ever being mistaken for an actual joint by the for-in loops downstream.
 function poseFrom(res){
   const shift = res.__shift || 0;
   const lift = res.__lift || 0;
+  const spin = res.__spin || 0;
   const over = {};
-  for(const k in res){ if(k==='__shift'||k==='__lift') continue; over[k]=res[k]; }
+  for(const k in res){ if(k==='__shift'||k==='__lift'||k==='__spin') continue; over[k]=res[k]; }
   const p = basePose(over);
   if(shift || lift){ for(const k in p){ p[k]={x:p[k].x+shift,y:p[k].y-lift}; } }
+  if (spin) Object.defineProperty(p, '__spin', { value: spin, enumerable: false, writable: true, configurable: true });
   return p;
 }
 
@@ -1339,7 +1397,7 @@ const DANCE_MOVES = [
   {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
    text:'Spin with arms out, eyes fixed on one point.',
    meaning:'Dissolving the self; devotion that never loses sight of the divine.',
-   fn:t=>poseFrom(M.spin(t,4.5))},
+   fn:t=>poseFrom({...M.spin(t,4.5),__spin:t*3.2})},
   {dance:'Kathak · North India', name:'Tatkar — Conversation of Feet',
    text:'Speak with your feet: heel, ball, heel — upper body calm.',
    meaning:'A living dialogue with Tala, the cosmic pulse.',
@@ -1371,7 +1429,7 @@ const DANCE_MOVES = [
   {dance:'Manipuri · Manipur', name:'The Circular Flow',
    text:'Turn slowly like the earth rotating, a wave through the arms.',
    meaning:'Time is circular; every ending contains a beginning.',
-   fn:t=>poseFrom({...M.spin(t,0.8),...M.armCircles(t*0.6)})},
+   fn:t=>poseFrom({...M.spin(t,0.8),...M.armCircles(t*0.6),__spin:t*0.7})},
   {dance:'Manipuri · Manipur', name:'Hands Like Water',
    text:'Fingers curl and open in exchange, wrists free, like the tide.',
    meaning:'The hands are not stating — they are singing nature.',
@@ -1495,7 +1553,7 @@ const DANCE_MOVES = [
   {dance:'Zeybek · Aegean Anatolia', name:'The Slow Claim',
    text:'Rotate gradually with wide arms and steady footing.',
    meaning:'Claiming the surrounding space with confidence.',
-   fn:t=>poseFrom({...M.spin(t,1),...M.armsOpen(t*0.5)})},
+   fn:t=>poseFrom({...M.spin(t,1),...M.armsOpen(t*0.5),__spin:t*0.5})},
   {dance:'Sema · Mevlevi Türkiye', name:'Arms Crossed — The Beginning',
    text:'Head inclined, arms crossed over the chest.',
    meaning:'The unity of God; the journey\'s spiritual beginning.',
@@ -1503,7 +1561,7 @@ const DANCE_MOVES = [
   {dance:'Sema · Mevlevi Türkiye', name:'The Whirling',
    text:'Turn continuously around your own axis, right palm up, left palm down.',
    meaning:'Receiving divine grace and passing it to the world.',
-   fn:t=>poseFrom({...M.spin(t,1.6),right_wrist:{x:CXX+0.14,y:SHY-0.18},left_wrist:{x:CXX-0.14,y:SHY+0.16}})},
+   fn:t=>poseFrom({...M.spin(t,1.6),right_wrist:{x:CXX+0.14,y:SHY-0.18},left_wrist:{x:CXX-0.14,y:SHY+0.16},__spin:t*1.3})},
   {dance:'Azerbaijani dance', name:'On the Toes',
    text:'Rise tall on the tips of the toes, body stretched upward.',
    meaning:'Taller, lighter, faster — the proud elevated body.',
@@ -1511,7 +1569,7 @@ const DANCE_MOVES = [
   {dance:'Azerbaijani dance', name:'The Statue Freeze',
    text:'Circle slowly with expressive hands — then freeze when the music stops.',
    meaning:'The human body becomes humor and sculpture.',
-   fn:t=>{const c=(t%3)<2.2;return c?poseFrom(M.armCircles(t*0.7)):poseFrom(M.still(0));}},
+   fn:t=>{const c=(t%3)<2.2;return c?poseFrom({...M.armCircles(t*0.7),__spin:t*0.5}):poseFrom(M.still(0));}},
   {dance:'Azerbaijani dance', name:'Elder\'s Dignity',
    text:'Calm, mature, controlled gestures — never rushing.',
    meaning:'Dignity and beauty do not belong only to the young.',
@@ -1521,11 +1579,11 @@ const DANCE_MOVES = [
   {dance:'Court dance · China', name:'Immortal\'s Pivot',
    text:'A weightless single-foot pivot turn, posture lifted, sleeves flaring.',
    meaning:'Depicting how the immortals live in the heavens.',
-   fn:t=>poseFrom(M.spin(t,2.2))},
+   fn:t=>poseFrom({...M.spin(t,2.2),__spin:t*1.6})},
   {dance:'Hu Xuan · Western Regions', name:'Spinning on the Mat',
    text:'Rapid continuous spinning on one foot, arms high, skirt flaring.',
    meaning:'Splendid amusement for the imperial banquet.',
-   fn:t=>poseFrom(M.spin(t,6))},
+   fn:t=>poseFrom({...M.spin(t,6),__spin:t*3.6})},
   {dance:'Errenzhuan · Northeast China', name:'Handkerchief & Fan',
    text:'Hips twist with the drum, wrists spin the handkerchief and flip the fan.',
    meaning:'Celebrating and praying for the harvest.',
@@ -1537,7 +1595,7 @@ const DANCE_MOVES = [
   {dance:'Yayue · Imperial ritual', name:'The Ritual Square',
    text:'Step forward, back, and turn in perfect uniform slowness.',
    meaning:'Hierarchical order; reverence for heaven, earth, ancestors.',
-   fn:t=>poseFrom({...M.overhead(t*0.4),...M.sideStep(t,0.9)})},
+   fn:t=>poseFrom({...M.overhead(t*0.4),...M.sideStep(t,0.9),__spin:Math.sin(t*0.35)*0.65})},
   {dance:'Nuo · Exorcism dance', name:'Mask Stomp',
    text:'Stomp heavily, swing arms wide in striking, driving gestures.',
    meaning:'Driving away plague demons; praying for safety and harvest.',
@@ -1561,7 +1619,7 @@ const DANCE_MOVES = [
   {dance:'Bonfire circle · China', name:'Around the Fire',
    text:'Hands joined in a circle, stomping counterclockwise, singing.',
    meaning:'Harvest, social joy, the village\'s peace and prosperity.',
-   fn:t=>poseFrom({...M.sideStep(t,2.4),...M.stomp(t,4)})},
+   fn:t=>poseFrom({...M.sideStep(t,2.4),...M.stomp(t,4),__spin:-t*0.6})},
   {dance:'Tea-picking dance · China', name:'Mincing Tea Steps',
    text:'Light tiny steps, bending to pluck leaves, chasing butterflies.',
    meaning:'The vivid tea-harvest life of mountain villages.',
@@ -1570,11 +1628,11 @@ const DANCE_MOVES = [
 
 let moveIdx = 0, move0 = null;
 
-// ---- Session system: 1-minute dance per participant ----
+// ---- Session system: 2-minute dance per participant ----
 let moveOrder = DANCE_MOVES.map((_, i) => i);
 let orderPos = 0;
 let sessionStart = null;
-const SESSION_LENGTH = 60;
+const SESSION_LENGTH = 120;
 let sessionActive = false;
 
 function shuffleOrder() {
@@ -1691,17 +1749,20 @@ function currentMovePose(t) {
     moveIdx = moveOrder[orderPos];
     move0 = t;
   }
-  let pose;
+  let pose, spinVal;
   const e2 = t - move0;
   const cur = DANCE_MOVES[moveIdx].fn(t);
+  const curSpin = cur.__spin || 0;
   if (e2 > MOVE_TIME - BLEND) {
     let f = (e2 - (MOVE_TIME - BLEND)) / BLEND;
     f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
     const nextIdx = moveOrder[(orderPos + 1) % moveOrder.length];
     const nxt = DANCE_MOVES[nextIdx].fn(t);
     pose = lerpPose(cur, nxt, f);
+    spinVal = curSpin + ((nxt.__spin || 0) - curSpin) * f;
   } else {
     pose = cur;
+    spinVal = curSpin;
   }
   const wo = wanderOffset(t);
   const moved = {};
@@ -1718,6 +1779,7 @@ function currentMovePose(t) {
     const jy = Math.cos(t*1.35 + ph*0.85)*0.0024;
     out[k] = { x: smoothed[k].x + jx, y: smoothed[k].y + jy };
   }
+  Object.defineProperty(out, '__spin', { value: spinVal, enumerable: false, writable: true, configurable: true });
   return out;
 }
 function currentMoveName() { return DANCE_MOVES[moveIdx].name; }
@@ -1753,48 +1815,63 @@ function drawStickLine(joints, rect, opts) {
   const pelvis = mid(lh, rh);
 
   const seg = (a, b) => { if(!a||!b) return; c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); };
+  const nose = P('nose');
+  const drawSkeleton = () => {
+    seg(neck, pelvis);
+    seg(ls, rs);
+    seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
+    seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
+    seg(lh, rh);
+    seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
+    seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
+    if (nose) { c.beginPath(); c.arc(nose.x, nose.y, (opts.headR||14)*scaleMul, 0, Math.PI*2); c.stroke(); }
+    if (nose && neck) seg(nose, neck);
+  };
 
   c.save();
   c.beginPath(); c.rect(rect.x, rect.y, rect.w, rect.h); c.clip();
+  if (opts.spin) {
+    const spinAround = pelvis || neck || { x: rect.x + rect.w/2, y: rect.y + rect.h/2 };
+    c.translate(spinAround.x, spinAround.y);
+    c.rotate(opts.spin);
+    c.translate(-spinAround.x, -spinAround.y);
+  }
   c.lineCap = 'round'; c.lineJoin = 'round';
+
+  // Pass 1: dark outline "halo" — this is what keeps the figure readable
+  // against a white wall as much as a dark room.
+  if (opts.outline !== false) {
+    c.strokeStyle = opts.outlineColor || 'rgba(10,12,10,0.85)';
+    c.lineWidth = opts.width + 5;
+    c.shadowBlur = 0;
+    drawSkeleton();
+  }
+
+  // Pass 2: the actual guide color, on top
   c.strokeStyle = opts.color;
   c.lineWidth = opts.width;
-  c.shadowColor = 'rgba(0,0,0,0.55)';
-  c.shadowBlur = 7;
-
-  // spine (neck -> pelvis)
-  seg(neck, pelvis);
-  // shoulders line (short) so arms branch naturally
-  seg(ls, rs);
-  // arms
-  seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
-  seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
-  // hips line (short) so legs branch
-  seg(lh, rh);
-  // legs
-  seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
-  seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
-
-  // head (small circle above neck, at nose)
-  const nose = P('nose');
-  if (nose) { c.beginPath(); c.arc(nose.x, nose.y, (opts.headR||14)*scaleMul, 0, Math.PI*2); c.stroke(); }
-  // neck link to head
-  if (nose && neck) seg(nose, neck);
+  c.shadowColor = 'rgba(0,0,0,0.4)';
+  c.shadowBlur = 4;
+  drawSkeleton();
 
   c.restore();
   // Report where the head landed on screen so the caller can place text above it
   return nose || neck || pelvis || { x: rect.x + rect.w/2, y: rect.y + rect.h*0.25 };
 }
 
-// Draw the (optionally filtered) camera video into a rect, mirrored.
+// Draw the (optionally filtered) camera video into a rect, mirrored, with a
+// proper "cover" crop so the picture never stretches/squeezes to fit the
+// screen's aspect ratio.
 function drawCameraToRect(rect, mode) {
   const vw = video.videoWidth||0, vh = video.videoHeight||0;
   if (!vw || !vh) return;
+  updateCamCrop(rect);
+  const sx = camCrop.sx*vw, sy = camCrop.sy*vh, sw = camCrop.sw*vw, sh = camCrop.sh*vh;
   if (mode === 'thermal' || mode === 'negative') {
-    const sw = 200, sh = Math.max(2, Math.round(200*vh/vw));
-    offCanvas.width = sw; offCanvas.height = sh;
-    offCtx.drawImage(video, 0, 0, sw, sh);
-    let img; try { img = offCtx.getImageData(0,0,sw,sh); } catch(e){ return; }
+    const outW = 200, outH = Math.max(2, Math.round(200*sh/sw));
+    offCanvas.width = outW; offCanvas.height = outH;
+    offCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
+    let img; try { img = offCtx.getImageData(0,0,outW,outH); } catch(e){ return; }
     const d = img.data;
     if (mode === 'thermal') {
       for (let i=0;i<d.length;i+=4){ const L=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; const c=thermalColor(L); d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; }
@@ -1806,13 +1883,13 @@ function drawCameraToRect(rect, mode) {
     ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
     ctx.imageSmoothingEnabled = true;
     ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
-    ctx.drawImage(offCanvas, 0,0,sw,sh, 0,0, rect.w, rect.h);
+    ctx.drawImage(offCanvas, 0,0,outW,outH, 0,0, rect.w, rect.h);
     ctx.restore();
   } else {
     ctx.save();
     ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
     ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
-    ctx.drawImage(video, 0,0, rect.w, rect.h);
+    ctx.drawImage(video, sx, sy, sw, sh, 0,0, rect.w, rect.h);
     ctx.restore();
   }
 }
@@ -1842,9 +1919,12 @@ function drawFaceBlurRect(joints, rect) {
     for(let j=0;j<block;j++)for(let k=0;k<block;k++){const p2=xx+k,q2=yy+j;if(p2>=bw||q2>=bh)continue;const idx=(q2*bw+p2)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;}
   }
   offCtx.putImageData(img,0,0);
-  // map normalized box into rect (mirrored)
-  const sx0 = rect.x + (1-(nx0+nw))*rect.w, sy0 = rect.y + ny0*rect.h;
-  const sw = nw*rect.w, sh = nh*rect.h;
+  // map normalized box into rect (mirrored), through the same cover-crop
+  // used to draw the video, so the blur stays glued to the face
+  const d0 = toCropped(nx0, ny0), d1 = toCropped(nx0+nw, ny0+nh);
+  const dispW = d1.x - d0.x, dispH = d1.y - d0.y;
+  const sx0 = rect.x + (1-(d0.x+dispW))*rect.w, sy0 = rect.y + d0.y*rect.h;
+  const sw = dispW*rect.w, sh = dispH*rect.h;
   ctx.save();
   ctx.beginPath(); ctx.ellipse(sx0+sw/2, sy0+sh/2, sw/2, sh/2, 0, 0, 2*Math.PI); ctx.clip();
   ctx.translate(sx0+sw, sy0); ctx.scale(-1,1);
@@ -1858,8 +1938,8 @@ function drawFaceBlurRect(joints, rect) {
 // line: "here is exactly where the camera sees your body right now."
 function drawUserTracker(joints, rect, opts) {
   const c = opts.ctx || ctx;
-  const px = (nx) => rect.x + (1 - nx) * rect.w; // mirror to match mirrored video
-  const py = (ny) => rect.y + ny * rect.h;
+  const px = (nx) => { const d = toCropped(nx, 0).x; return rect.x + (1 - d) * rect.w; };
+  const py = (ny) => { const d = toCropped(0, ny).y; return rect.y + d * rect.h; };
   const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
   const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
 
@@ -1904,6 +1984,12 @@ function keypointsToNamed(keypoints) {
 const TEMPLATE_SHOULDER_W = 0.18;
 let currentAlign = { cx: CXX, cy: HIPY, scale: 1 };
 const ALIGN_SMOOTH = 0.12;
+// Partner mode: how the guide positions itself relative to the participant.
+// 'align'  — stands on/overlapping you (original behaviour)
+// 'left'   — stands beside you, to your left, like a dance partner
+// 'right'  — stands beside you, to your right
+let partnerMode = 'align';
+
 function updateAlign(named, okB) {
   let target;
   if (okB) {
@@ -1913,9 +1999,17 @@ function updateAlign(named, okB) {
     const shoulderCX = (ls.x + rs.x) / 2, shoulderCY = (ls.y + rs.y) / 2;
     const hipCX = (lh && rh) ? (lh.x + rh.x) / 2 : shoulderCX;
     const hipCY = (lh && rh) ? (lh.y + rh.y) / 2 : shoulderCY + 0.22;
-    let scale = shoulderW / TEMPLATE_SHOULDER_W;
+    // Crop-correct both the center point and the scale so sizing/position
+    // match what's actually shown on screen (see camCrop / toCropped above),
+    // not the uncropped raw camera frame.
+    const dHip = toCropped(hipCX, hipCY);
+    let scale = (shoulderW / camCrop.sw) / TEMPLATE_SHOULDER_W;
     scale = Math.max(0.55, Math.min(2.3, scale));
-    target = { cx: 1 - hipCX, cy: hipCY, scale }; // mirrored to match mirrored video
+    let cx = 1 - dHip.x; // mirrored to match mirrored video
+    if (partnerMode === 'left') cx -= 0.36 * scale;
+    else if (partnerMode === 'right') cx += 0.36 * scale;
+    cx = Math.max(0.12, Math.min(0.88, cx));
+    target = { cx, cy: dHip.y, scale };
   } else {
     target = { cx: CXX, cy: HIPY, scale: 1 };
   }
@@ -1974,7 +2068,7 @@ async function renderLoop() {
     // Idle: one white teaching figure waits (aligned to you if you're already
     // in frame), with a prompt to start.
     const idlePose = idleBreathePose(now);
-    drawStickLine(idlePose, rect, { color: '#ffffff', width: 4, headR: 16, align: currentAlign });
+    drawStickLine(idlePose, rect, { color: GUIDE_COLOR, width: 4, headR: 16, align: currentAlign });
     ctx.save();
     ctx.textAlign = 'center';
     const icx = w/2, icy = h * 0.18;
@@ -1987,7 +2081,7 @@ async function renderLoop() {
     ctx.fillText('Tippen zum Tanzen', icx, icy + 30);
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText('1 minute · random moves · with beat', icx, icy + 60);
+    ctx.fillText('2 minutes · random moves · with beat', icx, icy + 60);
     ctx.restore();
   } else {
     const remain = SESSION_LENGTH - (now - sessionStart);
@@ -1995,7 +2089,7 @@ async function renderLoop() {
       endSession();
     } else {
       const movePose = currentMovePose(now);
-      const headPos = drawStickLine(movePose, rect, { color: '#ffffff', width: 4, headR: 16, align: currentAlign });
+      const headPos = drawStickLine(movePose, rect, { color: GUIDE_COLOR, width: 4, headR: 16, align: currentAlign, spin: movePose.__spin || 0 });
 
       // countdown, top-right of screen
       ctx.save();
@@ -2060,6 +2154,7 @@ yesBtn.addEventListener('click', async () => {
     setStatus('Live', 'ready');
     running = true;
     filterToggle.classList.remove('hidden');
+    partnerToggle.classList.remove('hidden');
     fsToggle.classList.remove('hidden');
     filterToggle.textContent = FILTER_LABELS[faceFilterMode];
     renderLoop();
@@ -2079,7 +2174,7 @@ function byeLoop() {
   const t = performance.now() / 1000;
   const pose = poseFrom(M.wave(t * 0.6));
   drawStickLine(pose, { x: 0, y: 0, w, h }, {
-    ctx: byeCtx, color: '#ffffff', width: 4, headR: 16,
+    ctx: byeCtx, color: GUIDE_COLOR, width: 4, headR: 16,
     align: { cx: CXX, cy: HIPY, scale: 1.15 }
   });
   requestAnimationFrame(byeLoop);
