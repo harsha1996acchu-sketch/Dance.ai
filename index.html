@@ -1786,6 +1786,19 @@ function applyCounterbalance(pose) {
   return out;
 }
 
+// Keep a rotation angle bounded to (-π, π], and blend two angles the SHORT
+// way around — otherwise a move that's been spinning for a while (angle =
+// dozens of radians) would try to visually "unwind" all of it in the 1.2s
+// blend into the next move, which looks like the whole figure spinning out
+// of control on every transition, not just the intended turning moves.
+function wrapAngle(a) {
+  a = a % (Math.PI*2);
+  if (a > Math.PI) a -= Math.PI*2;
+  else if (a < -Math.PI) a += Math.PI*2;
+  return a;
+}
+function angleLerp(a, b, f) { return a + wrapAngle(b - a) * f; }
+
 function currentMovePose(t) {
   if (move0 === null) move0 = t;
   const elapsed = t - move0;
@@ -1797,14 +1810,14 @@ function currentMovePose(t) {
   let pose, spinVal;
   const e2 = t - move0;
   const cur = DANCE_MOVES[moveIdx].fn(t);
-  const curSpin = cur.__spin || 0;
+  const curSpin = wrapAngle(cur.__spin || 0);
   if (e2 > MOVE_TIME - BLEND) {
     let f = (e2 - (MOVE_TIME - BLEND)) / BLEND;
     f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
     const nextIdx = moveOrder[(orderPos + 1) % moveOrder.length];
     const nxt = DANCE_MOVES[nextIdx].fn(t);
     pose = lerpPose(cur, nxt, f);
-    spinVal = curSpin + ((nxt.__spin || 0) - curSpin) * f;
+    spinVal = angleLerp(curSpin, wrapAngle(nxt.__spin || 0), f);
   } else {
     pose = cur;
     spinVal = curSpin;
