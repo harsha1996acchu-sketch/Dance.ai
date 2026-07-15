@@ -1859,16 +1859,28 @@ function jointPhase(key) {
 }
 
 // Stick-LINE figure: a single spine line, with arms and legs branching off —
-// no torso rectangle. Bendable, elegant. Supports "align": repositioning and
-// rescaling the whole figure so it can stand where/how big the participant
-// stands (detected from camera), instead of always sitting at frame center.
+// no torso rectangle. Bendable, elegant. Two coordinate modes:
+//  - default: joints are template-space (centered on CXX/HIPY), positioned
+//    and uniformly scaled via opts.align — used before real proportions
+//    are known.
+//  - opts.direct: joints are already absolute normalized (0..1) screen
+//    coordinates, e.g. from retargetPose() — mapped straight through with
+//    no recentering/rescaling, since sizing is already baked into the bone
+//    lengths themselves.
 // opts.ctx lets the same drawer be reused on a different canvas (bye screen).
 function drawStickLine(joints, rect, opts) {
   const c = opts.ctx || ctx;
-  const align = opts.align || { cx: CXX, cy: HIPY, scale: 1 };
-  const scaleMul = (opts.sc || 1) * (align.scale || 1);
-  const px = (nx) => rect.x + (align.cx + (nx - CXX) * scaleMul) * rect.w;
-  const py = (ny) => rect.y + (align.cy + (ny - HIPY) * scaleMul) * rect.h;
+  let px, py, scaleMul;
+  if (opts.direct) {
+    px = (nx) => rect.x + nx * rect.w;
+    py = (ny) => rect.y + ny * rect.h;
+    scaleMul = 1;
+  } else {
+    const align = opts.align || { cx: CXX, cy: HIPY, scale: 1 };
+    scaleMul = (opts.sc || 1) * (align.scale || 1);
+    px = (nx) => rect.x + (align.cx + (nx - CXX) * scaleMul) * rect.w;
+    py = (ny) => rect.y + (align.cy + (ny - HIPY) * scaleMul) * rect.h;
+  }
   const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
   const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
 
@@ -2080,6 +2092,96 @@ function updateAlign(named, okB) {
   currentAlign.scale += (target.scale - currentAlign.scale) * ALIGN_SMOOTH;
 }
 
+// --- Real-proportions retargeting ---
+// Instead of scaling one fixed "template body" up and down uniformly (which
+// reads as a generic/childlike figure no matter who's standing there), this
+// measures each actual bone length off the tracked skeleton — the same
+// tracking data that draws the green line, which is accurate frame to frame
+// — and rebuilds the guide's skeleton bone-by-bone to match. The animated
+// pose (from currentMovePose) still supplies the DIRECTION each bone points
+// in; only the LENGTH of each bone comes from the real body. Whoever steps
+// in front of the camera, the guide is built to their proportions.
+function midPt(a, b) { return (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b); }
+function normVec(dx, dy) {
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-5) return { x: 0, y: -1, len: 0 };
+  return { x: dx/len, y: dy/len, len };
+}
+
+// Sensible adult proportions (not a child, not oversized) — used whenever
+// nobody's tracked yet, and blended toward the real measured body once
+// someone steps in front of the camera.
+const DEFAULT_PROPORTIONS = {
+  shoulderW: 0.18, hipW: 0.16, spine: 0.22,
+  upperArm: 0.1166, forearm: 0.102,
+  thigh: 0.160, shin: 0.160, neckToNose: 0.12,
+};
+let bodyProportions = { ...DEFAULT_PROPORTIONS };
+const PROP_SMOOTH = 0.08;
+
+// Measure each bone length directly off the tracked joints (in display-
+// corrected normalized space, so it's not thrown off by the camera crop).
+function measureProportions(named) {
+  const ls=named.left_shoulder, rs=named.right_shoulder;
+  if (!ls || !rs) return null;
+  const disp = {};
+  for (const k in named) disp[k] = toCropped(named[k].x, named[k].y);
+  const d = (a,b) => (disp[a] && disp[b]) ? Math.hypot(disp[a].x-disp[b].x, disp[a].y-disp[b].y) : null;
+  const avg2 = (a,b) => (a!=null && b!=null) ? (a+b)/2 : (a!=null ? a : b);
+  const shoulderW = d('left_shoulder','right_shoulder') || DEFAULT_PROPORTIONS.shoulderW;
+  const hipW = d('left_hip','right_hip') || shoulderW * (DEFAULT_PROPORTIONS.hipW/DEFAULT_PROPORTIONS.shoulderW);
+  const neck = midPt(disp.left_shoulder, disp.right_shoulder);
+  const pelvis = (disp.left_hip && disp.right_hip) ? midPt(disp.left_hip, disp.right_hip) : null;
+  const spine = pelvis ? Math.hypot(neck.x-pelvis.x, neck.y-pelvis.y) : shoulderW*(DEFAULT_PROPORTIONS.spine/DEFAULT_PROPORTIONS.shoulderW);
+  const upperArm = avg2(d('left_shoulder','left_elbow'), d('right_shoulder','right_elbow')) || shoulderW*(DEFAULT_PROPORTIONS.upperArm/DEFAULT_PROPORTIONS.shoulderW);
+  const forearm = avg2(d('left_elbow','left_wrist'), d('right_elbow','right_wrist')) || shoulderW*(DEFAULT_PROPORTIONS.forearm/DEFAULT_PROPORTIONS.shoulderW);
+  const thigh = avg2(d('left_hip','left_knee'), d('right_hip','right_knee')) || shoulderW*(DEFAULT_PROPORTIONS.thigh/DEFAULT_PROPORTIONS.shoulderW);
+  const shin = avg2(d('left_knee','left_ankle'), d('right_knee','right_ankle')) || shoulderW*(DEFAULT_PROPORTIONS.shin/DEFAULT_PROPORTIONS.shoulderW);
+  const noseLen = (disp.nose && neck) ? Math.hypot(disp.nose.x-neck.x, disp.nose.y-neck.y) : shoulderW*(DEFAULT_PROPORTIONS.neckToNose/DEFAULT_PROPORTIONS.shoulderW);
+  return { shoulderW, hipW, spine, upperArm, forearm, thigh, shin, neckToNose: noseLen };
+}
+
+function updateBodyProportions(named, okB) {
+  const target = (okB && measureProportions(named)) || DEFAULT_PROPORTIONS;
+  for (const k in DEFAULT_PROPORTIONS) {
+    const v = target[k] != null ? target[k] : DEFAULT_PROPORTIONS[k];
+    bodyProportions[k] += (v - bodyProportions[k]) * PROP_SMOOTH;
+  }
+}
+
+// Rebuild the guide's skeleton: same pose (bone directions) as the animated
+// template, but each bone's length comes from bodyProportions. Output is
+// already-positioned, absolute normalized (0..1) screen-space coordinates —
+// drawStickLine's "direct" mode renders these as-is, no further scaling.
+function retargetPose(tj, align, prop) {
+  const tPelvis = midPt(tj.left_hip, tj.right_hip);
+  const tNeck = midPt(tj.left_shoulder, tj.right_shoulder);
+  const root = { x: align.cx, y: align.cy };
+  const spineDir = normVec(tNeck.x-tPelvis.x, tNeck.y-tPelvis.y);
+  const neck = { x: root.x + spineDir.x*prop.spine, y: root.y + spineDir.y*prop.spine };
+
+  const out = {};
+  const place = (key, parentPt, tParent, tChild, length) => {
+    const dir = normVec(tChild.x-tParent.x, tChild.y-tParent.y);
+    out[key] = { x: parentPt.x + dir.x*length, y: parentPt.y + dir.y*length };
+  };
+
+  place('left_hip', root, tPelvis, tj.left_hip, prop.hipW/2);
+  place('right_hip', root, tPelvis, tj.right_hip, prop.hipW/2);
+  place('left_shoulder', neck, tNeck, tj.left_shoulder, prop.shoulderW/2);
+  place('right_shoulder', neck, tNeck, tj.right_shoulder, prop.shoulderW/2);
+  place('left_elbow', out.left_shoulder, tj.left_shoulder, tj.left_elbow, prop.upperArm);
+  place('right_elbow', out.right_shoulder, tj.right_shoulder, tj.right_elbow, prop.upperArm);
+  place('left_wrist', out.left_elbow, tj.left_elbow, tj.left_wrist, prop.forearm);
+  place('right_wrist', out.right_elbow, tj.right_elbow, tj.right_wrist, prop.forearm);
+  place('left_knee', out.left_hip, tj.left_hip, tj.left_knee, prop.thigh);
+  place('right_knee', out.right_hip, tj.right_hip, tj.right_knee, prop.thigh);
+  place('left_ankle', out.left_knee, tj.left_knee, tj.left_ankle, prop.shin);
+  place('right_ankle', out.right_knee, tj.right_knee, tj.right_ankle, prop.shin);
+  place('nose', neck, tNeck, tj.nose, prop.neckToNose);
+  return out;
+}
+
 // Gentle idle breathing pose for when no session is running yet.
 function idleBreathePose(t) {
   const b = Math.sin(t * 1.1) * 0.014;
@@ -2124,13 +2226,16 @@ async function renderLoop() {
     }
   } catch (e) { /* skip frame on transient error */ }
   updateAlign(named, okB);
+  updateBodyProportions(named, okB);
   if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 3.2 });
+  const headRpx = bodyProportions.shoulderW * 0.42 * w;
 
   if (!sessionActive) {
     // Idle: one white teaching figure waits (aligned to you if you're already
-    // in frame), with a prompt to start.
+    // in frame, resized to your real proportions), with a prompt to start.
     const idlePose = idleBreathePose(now);
-    drawStickLine(idlePose, rect, { color: GUIDE_COLOR, width: 3.2, headR: 13, align: currentAlign });
+    const idleRetargeted = retargetPose(idlePose, currentAlign, bodyProportions);
+    drawStickLine(idleRetargeted, rect, { color: GUIDE_COLOR, width: 3.2, headR: headRpx, direct: true });
     ctx.save();
     ctx.textAlign = 'center';
     const icx = w/2, icy = h * 0.18;
@@ -2151,7 +2256,8 @@ async function renderLoop() {
       endSession();
     } else {
       const movePose = currentMovePose(now);
-      const headPos = drawStickLine(movePose, rect, { color: GUIDE_COLOR, width: 3.2, headR: 13, align: currentAlign, spin: movePose.__spin || 0 });
+      const retargeted = retargetPose(movePose, currentAlign, bodyProportions);
+      const headPos = drawStickLine(retargeted, rect, { color: GUIDE_COLOR, width: 3.2, headR: headRpx, direct: true, spin: movePose.__spin || 0 });
 
       // countdown, top-right of screen
       ctx.save();
@@ -2235,9 +2341,10 @@ function byeLoop() {
   byeCtx.clearRect(0, 0, w, h);
   const t = performance.now() / 1000;
   const pose = poseFrom(M.wave(t * 0.6));
-  drawStickLine(pose, { x: 0, y: 0, w, h }, {
-    ctx: byeCtx, color: GUIDE_COLOR, width: 3.2, headR: 13,
-    align: { cx: CXX, cy: HIPY, scale: 1.15 }
+  const retargeted = retargetPose(pose, { cx: CXX, cy: HIPY }, DEFAULT_PROPORTIONS);
+  drawStickLine(retargeted, { x: 0, y: 0, w, h }, {
+    ctx: byeCtx, color: GUIDE_COLOR, width: 3.2, headR: DEFAULT_PROPORTIONS.shoulderW*0.42*w,
+    direct: true
   });
   requestAnimationFrame(byeLoop);
 }
