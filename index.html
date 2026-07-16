@@ -527,6 +527,23 @@ window.addEventListener('beforeunload', (e) => {
 let detector = null;
 let running = false;
 
+// --- Freeze watchdog ---
+// The render loop stamps lastHeartbeat every frame. This timer runs
+// INDEPENDENTLY (setInterval isn't affected by an rAF stall), so if the loop
+// hasn't drawn for a few seconds while it's supposed to be live, we assume a
+// freeze (bad camera frame, model hiccup, memory stall) and auto-reload to
+// recover — no admin needed. It only acts when the app should be running, so
+// it won't fire on the idle welcome page.
+let lastHeartbeat = performance.now();
+const WATCHDOG_STALL_MS = 4000;
+setInterval(() => {
+  if (!running) { lastHeartbeat = performance.now(); return; }
+  if (performance.now() - lastHeartbeat > WATCHDOG_STALL_MS) {
+    adminReloading = true;   // skip unload confirmation
+    location.reload();
+  }
+}, 1000);
+
 const FILTER_MODES = ['none', 'thermal', 'negative', 'pixel'];
 const FILTER_LABELS = { none: 'Filter: Off', thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
 let faceFilterMode = 'none';
@@ -1600,6 +1617,7 @@ const KP = {
   reachR:    {right_wrist:{x:CXX+0.31,y:0.30},left_wrist:{x:CXX+0.16,y:0.38},right_elbow:{x:CXX+0.20,y:0.36},left_elbow:{x:CXX+0.04,y:0.44},nose:{x:CXX+0.04,y:0.29},right_hip:{x:CXX+0.09,y:HIPY},right_knee:{x:CXX+0.15,y:0.78},right_ankle:{x:CXX+0.19,y:0.94}},
   prayer:    {left_wrist:{x:CXX-0.015,y:0.46},right_wrist:{x:CXX+0.015,y:0.46},left_elbow:{x:CXX-0.12,y:0.49},right_elbow:{x:CXX+0.12,y:0.49},left_knee:{x:CXX-0.12,y:0.78},right_knee:{x:CXX+0.12,y:0.78},left_ankle:{x:CXX-0.08,y:0.94},right_ankle:{x:CXX+0.08,y:0.94}},
   hipsHands: {left_wrist:{x:CXX-0.10,y:0.60},right_wrist:{x:CXX+0.10,y:0.60},left_elbow:{x:CXX-0.18,y:0.50},right_elbow:{x:CXX+0.18,y:0.50},left_knee:{x:CXX-0.13,y:0.78},right_knee:{x:CXX+0.13,y:0.78},left_ankle:{x:CXX-0.15,y:0.94},right_ankle:{x:CXX+0.15,y:0.94}},
+  clapFront: {left_wrist:{x:CXX-0.01,y:0.42},right_wrist:{x:CXX+0.01,y:0.42},left_elbow:{x:CXX-0.14,y:0.46},right_elbow:{x:CXX+0.14,y:0.46},left_knee:{x:CXX-0.10,y:0.79},right_knee:{x:CXX+0.10,y:0.79},left_ankle:{x:CXX-0.08,y:0.94},right_ankle:{x:CXX+0.08,y:0.94}},
   sweepLowL: {left_wrist:{x:CXX-0.27,y:0.60},right_wrist:{x:CXX-0.15,y:0.66},left_elbow:{x:CXX-0.17,y:0.52},right_elbow:{x:CXX-0.02,y:0.56},nose:{x:CXX-0.03,y:0.29}},
   sweepLowR: {right_wrist:{x:CXX+0.27,y:0.60},left_wrist:{x:CXX+0.15,y:0.66},right_elbow:{x:CXX+0.17,y:0.52},left_elbow:{x:CXX+0.02,y:0.56},nose:{x:CXX+0.03,y:0.29}},
   overheadL: {left_wrist:{x:CXX-0.20,y:0.19},right_wrist:{x:CXX-0.04,y:0.16},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.06,y:0.28},nose:{x:CXX-0.04,y:0.285}},
@@ -1892,6 +1910,26 @@ const DANCE_MOVES = [
    text:'Calm, mature, controlled gestures — never rushing.',
    meaning:'Dignity and beauty do not belong only to the young.',
    fn:seq(['chestOpen','stepWideL','chestOpen','stepWideR'],2.4)},
+  {dance:'Halay · Anatolia', name:'The Line Dance',
+   text:'Shoulders linked, step to the side and stamp together as one line.',
+   meaning:'Village unity — everyone moves as a single body.',
+   fn:seq(['tPose','stepWideR','tPose','stepWideL'],1.5)},
+  {dance:'Horon · Black Sea', name:'The Trembling',
+   text:'Rapid small shakes of the whole body, arms raised and quivering.',
+   meaning:'The shiver of the anchovy and the restless Black Sea.',
+   fn:seq(['wingsHigh','armsUp','wingsHigh','armsUp'],0.9)},
+  {dance:'Kaşık · Spoon dance', name:'The Spoon Clap',
+   text:'Click imaginary spoons overhead, then low, turning side to side.',
+   meaning:'Joy and celebration from the Anatolian heartland.',
+   fn:seq(['overheadL','sweepLowR','overheadR','sweepLowL'],1.3)},
+  {dance:'Kochari · Anatolia & Caucasus', name:'The Mountain Step',
+   text:'Heavy synchronized steps forward and back, knees springing.',
+   meaning:'The strength of the mountains, danced shoulder to shoulder.',
+   fn:seq(['halfSit','stepWideR','halfSit','stepWideL'],1.5)},
+  {dance:'Lezginka · Caucasus', name:'The Eagle Turn',
+   text:'Rise onto the toes, arms wide like wings, dart sharply across.',
+   meaning:'The proud eagle of the Caucasus mountains.',
+   fn:seq(['tPose','kickHighR','tPose','kickHighL'],1.3)},
 
   // ---------------- CHINA ----------------
   {dance:'Court dance · China', name:'Immortal\'s Pivot',
@@ -1962,12 +2000,50 @@ const LEAVE_DANCE_GRACE = 5;    // dancer gone this long mid-dance -> go home
 const IDLE_EMPTY_GRACE = 12;    // nobody at idle this long -> go home
 let danceComplete = false;      // set when a session finishes naturally
 
-function shuffleOrder() {
-  moveOrder = DANCE_MOVES.map((_, i) => i);
-  for (let i = moveOrder.length - 1; i > 0; i--) {
+// Classify each move into a broad region from its dance label, so the
+// shuffle can balance across countries instead of letting the largest pool
+// (India) dominate every session.
+function moveRegion(dance) {
+  if (/Bandari|Zār|Zar|Rezif|Sword dance|Choub|Handkerchief dance · Iran|Rowing dance|Persian|Lur/.test(dance)) return 'Iran';
+  if (/Zeybek|Sema|Mevlevi|Azerbaijani|Türkiye|Turkish|Halay|Horon|Kaşık|Kochari|Lezginka|Caucasus|Anatolia|Black Sea/.test(dance)) return 'Turkey';
+  if (/China|Chinese|Yayue|Nuo|Dragon|Lion|Waist drum|Flower Drum|Court dance|Hu Xuan|Peacock|Dai people|Bonfire|Tea-picking|Errenzhuan|Loess/.test(dance)) return 'China';
+  return 'India';
+}
+const REGION_ORDER = ['India', 'Iran', 'Turkey', 'China'];
+let moveIndexByRegion = null;
+function buildRegionIndex() {
+  moveIndexByRegion = { India: [], Iran: [], Turkey: [], China: [] };
+  DANCE_MOVES.forEach((m, i) => { moveIndexByRegion[moveRegion(m.dance)].push(i); });
+}
+
+function shuffleArr(a) {
+  for (let i = a.length - 1; i > 0; i--) {
     const j = (Math.random() * (i + 1)) | 0;
-    [moveOrder[i], moveOrder[j]] = [moveOrder[j], moveOrder[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
+  return a;
+}
+
+// Region-balanced order: shuffle each region's moves, then round-robin pull
+// one from each region in turn (India, Iran, Turkey, China, repeat). Result:
+// every session cycles through all four cultures evenly, and consecutive
+// moves are almost always from different countries — so it never feels like
+// "all Indian dances" and looks different each time.
+function shuffleOrder() {
+  if (!moveIndexByRegion) buildRegionIndex();
+  const pools = {};
+  for (const r of REGION_ORDER) pools[r] = shuffleArr(moveIndexByRegion[r].slice());
+  // randomize which region starts, so sessions don't always open with India
+  const startOffset = (Math.random() * REGION_ORDER.length) | 0;
+  const order = [];
+  let remaining = REGION_ORDER.reduce((s, r) => s + pools[r].length, 0);
+  let step = 0;
+  while (remaining > 0) {
+    const r = REGION_ORDER[(startOffset + step) % REGION_ORDER.length];
+    if (pools[r].length) { order.push(pools[r].shift()); remaining--; }
+    step++;
+  }
+  moveOrder = order;
   orderPos = 0;
   moveIdx = moveOrder[0];
 }
@@ -2084,6 +2160,7 @@ function startSession(t) {
   smoothVel = null;
   lastFrameT = null;
   lastSpokenIdx = -1;
+  sessionCount++;
 }
 function endSession() {
   sessionActive = false;
@@ -2695,6 +2772,8 @@ const wrapText = (text, maxW, font) => {
 async function renderLoop() {
   if (!running) return;
   if (returningHome) { requestAnimationFrame(renderLoop); return; }
+  lastHeartbeat = performance.now();   // watchdog: prove the loop is alive
+  try {
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
   const now = performance.now() / 1000;
@@ -2811,6 +2890,9 @@ async function renderLoop() {
     ctx.restore();
   }
 
+  } catch (err) {
+    console.error('render frame error (skipped):', err);
+  }
   requestAnimationFrame(renderLoop);
 }
 
@@ -2877,9 +2959,20 @@ function returnHome() {
 
 // Fade whatever's showing back to the start screen and reset for the next
 // participant. The camera/model keep running; we just hide the stage.
+let sessionCount = 0;
+const REFRESH_AFTER_SESSIONS = 7;   // reload after this many dances (clears memory)
+
 function goToStart(fromEl) {
   running = false;                 // pause the render loop
   sessionActive = false;
+  // Safe self-refresh: after N completed dances, quietly reload while on the
+  // home page (nobody dancing) to clear any memory buildup before it can
+  // cause a slowdown or freeze mid-exhibition.
+  if (sessionCount >= REFRESH_AFTER_SESSIONS) {
+    adminReloading = true;         // skip the unload confirmation
+    fadeToScreen(fromEl, startScreen, () => setTimeout(() => location.reload(), 400));
+    return;
+  }
   fadeToScreen(fromEl, startScreen, () => {
     // reset controls visibility state; they re-show when Yes is pressed again
     [filterToggle, partnerToggle, listenToggle, speedControl, fsToggle].forEach(el => el && el.classList.add('hidden'));
