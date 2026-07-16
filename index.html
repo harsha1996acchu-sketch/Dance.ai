@@ -119,6 +119,32 @@
     padding: 32px;
     text-align: center;
   }
+  /* Smooth cross-fade for every full-screen overlay */
+  #startScreen, #byeScreen, #satisfyScreen {
+    transition: opacity 0.6s ease;
+  }
+  .fadeOut { opacity: 0 !important; pointer-events: none; }
+
+  #adminRefresh {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.35);
+    color: rgba(255,255,255,0.55);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-appearance: none;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+  }
+  #adminRefresh:hover { opacity: 1; }
   #startScreen h1 {
     font-size: 20px;
     font-weight: 600;
@@ -126,11 +152,11 @@
     letter-spacing: -0.01em;
   }
   #startScreen .askText {
-    font-size: 22px;
+    font-size: 30px;
     font-weight: 600;
     color: var(--paper);
-    max-width: 320px;
-    line-height: 1.4;
+    max-width: 420px;
+    line-height: 1.35;
     margin: 18px 0 10px;
   }
   #startScreen .subText {
@@ -181,11 +207,42 @@
     margin: 0;
   }
 
+  #satisfyScreen {
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    z-index: 21;
+    overflow: hidden;
+  }
+  #satisfyCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  #satisfyText {
+    position: absolute;
+    top: 10%;
+    left: 0; right: 0;
+    text-align: center;
+    padding: 0 32px;
+  }
+  #satisfyText h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    color: var(--paper);
+  }
+  #satisfyText p {
+    font-size: 15px;
+    color: #ffe4a3;
+    margin: 0;
+    line-height: 1.5;
+  }
+
   #filterToggle {
     position: absolute;
-    top: env(safe-area-inset-top, 16px);
-    right: 16px;
-    margin-top: 88px;
+    left: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 96px);
     z-index: 12;
     -webkit-appearance: none;
     border: 1px solid rgba(255,180,120,0.5);
@@ -217,9 +274,8 @@
 
   #partnerToggle {
     position: absolute;
-    top: env(safe-area-inset-top, 16px);
-    right: 16px;
-    margin-top: 132px;
+    left: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 52px);
     z-index: 12;
     -webkit-appearance: none;
     border: 1px solid rgba(255,201,74,0.55);
@@ -234,9 +290,8 @@
 
   #listenToggle {
     position: absolute;
-    top: env(safe-area-inset-top, 16px);
-    right: 16px;
-    margin-top: 176px;
+    left: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 8px);
     z-index: 12;
     -webkit-appearance: none;
     border: 1px solid rgba(90,220,140,0.55);
@@ -253,6 +308,26 @@
     background: rgba(90,220,140,0.32);
     color: #eafff2;
   }
+
+  #speedControl {
+    position: absolute;
+    right: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 8px);
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 6px 12px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  #speedControl label { opacity: 0.8; }
+  #speedSlider { width: 90px; accent-color: #ffc94a; }
+  #speedValue { min-width: 30px; text-align: right; opacity: 0.9; }
 
   #danceProgressWrap {
     margin-bottom: 2px;
@@ -278,8 +353,11 @@
 </head>
 <body>
 
+<button id="adminRefresh" title="Admin: restart">⟳</button>
+
+
 <div id="startScreen">
-  <h1>Dance Mirror</h1>
+  <h1>AI + Bodies</h1>
   <p class="askText">Can I borrow your body for a dance?</p>
   <p class="subText">Your face is never shown or recorded. Everything runs offline, right here on this device.</p>
   <div id="consentBtns">
@@ -296,6 +374,14 @@
   </div>
 </div>
 
+<div id="satisfyScreen" class="hidden">
+  <canvas id="satisfyCanvas"></canvas>
+  <div id="satisfyText">
+    <h1 id="satisfyHeading">Ahh, that felt wonderful.</h1>
+    <p id="satisfySub">Thank you for lending me your body to dance.</p>
+  </div>
+</div>
+
 <div id="stage" class="hidden">
   <div id="ui">
     <div id="title">Dance Mirror</div>
@@ -303,8 +389,13 @@
   </div>
 
   <button id="filterToggle" class="hidden">Filter: Off</button>
-  <button id="partnerToggle" class="hidden">Partner: Overlap</button>
+  <button id="partnerToggle" class="hidden">Partner: Stand Right</button>
   <button id="listenToggle" class="hidden">🎤 Listen: Off</button>
+  <div id="speedControl" class="hidden">
+    <label for="speedSlider">Speed</label>
+    <input id="speedSlider" type="range" min="0.5" max="2.5" step="0.1" value="1">
+    <span id="speedValue">1.0×</span>
+  </div>
   <button id="fsToggle" class="hidden">⛶ Fullscreen</button>
 
   <video id="video" playsinline autoplay muted></video>
@@ -328,7 +419,28 @@ const noBtn = document.getElementById('noBtn');
 const byeScreen = document.getElementById('byeScreen');
 const byeCanvas = document.getElementById('byeCanvas');
 const byeCtx = byeCanvas.getContext('2d');
+const satisfyScreen = document.getElementById('satisfyScreen');
+const satisfyCanvas = document.getElementById('satisfyCanvas');
+const satisfyCtx = satisfyCanvas.getContext('2d');
+const satisfyHeading = document.getElementById('satisfyHeading');
+const satisfySub = document.getElementById('satisfySub');
 const stage = document.getElementById('stage');
+
+// Smoothly cross-fade one full-screen overlay to another. Fades the current
+// one out, then reveals the next and fades it in. Used for every page move.
+function fadeToScreen(hideEl, showEl, onShown) {
+  if (hideEl) {
+    hideEl.classList.add('fadeOut');
+    setTimeout(() => { hideEl.classList.add('hidden'); hideEl.classList.remove('fadeOut'); }, 600);
+  }
+  if (showEl) {
+    showEl.classList.remove('hidden');
+    showEl.classList.add('fadeOut');
+    // next frame, remove fadeOut so it transitions in
+    requestAnimationFrame(() => requestAnimationFrame(() => showEl.classList.remove('fadeOut')));
+  }
+  if (onShown) setTimeout(onShown, 620);
+}
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
 const ctx = canvas.getContext('2d');
@@ -339,6 +451,14 @@ const danceTimeLabel = document.getElementById('danceTimeLabel');
 const filterToggle = document.getElementById('filterToggle');
 const partnerToggle = document.getElementById('partnerToggle');
 const listenToggle = document.getElementById('listenToggle');
+const speedControl = document.getElementById('speedControl');
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
+speedSlider.addEventListener('input', () => {
+  speedFactor = parseFloat(speedSlider.value);
+  MOTION_SPEED = MOTION_SPEED_BASE * speedFactor;
+  speedValue.textContent = speedFactor.toFixed(1) + '×';
+});
 const fsToggle = document.getElementById('fsToggle');
 const PARTNER_LABELS = { align: 'Partner: Overlap', left: 'Partner: Stand Left', right: 'Partner: Stand Right' };
 partnerToggle.addEventListener('click', () => {
@@ -373,6 +493,35 @@ fsToggle.addEventListener('click', () => {
     fsToggle.textContent = '⛶ Fullscreen';
   }
   setTimeout(resizeCanvas, 300);
+});
+
+let adminReloading = false;
+// --- Admin refresh: the one deliberate way to hard-reset the exhibit ---
+document.getElementById('adminRefresh').addEventListener('click', () => {
+  adminReloading = true;
+  location.reload();
+});
+
+// --- Kiosk hardening: keep casual visitors from leaving the page ---
+// Block the right-click context menu, block text selection/drag, and swallow
+// the common keyboard shortcuts people might use to navigate away or open
+// dev tools. NOTE: a browser cannot fully trap every OS/browser shortcut from
+// JavaScript — for a truly locked-down public kiosk, also launch Chrome in
+// kiosk mode (see the notes I gave you) so the tab bar and menus are gone.
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('selectstart', e => e.preventDefault());
+document.addEventListener('dragstart', e => e.preventDefault());
+window.addEventListener('keydown', (e) => {
+  const k = (e.key || '').toLowerCase();
+  // block: Ctrl/Alt+anything nav, F5/refresh, back/forward, dev tools, tab-switch
+  if (e.ctrlKey || e.metaKey || e.altKey) { e.preventDefault(); return; }
+  if (['f5','f11','f12','backspace'].includes(k)) { e.preventDefault(); return; }
+}, true);
+// Ask for confirmation if something tries to unload (accidental close/refresh)
+window.addEventListener('beforeunload', (e) => {
+  if (adminReloading) return;
+  e.preventDefault();
+  e.returnValue = '';
 });
 
 let detector = null;
@@ -574,12 +723,14 @@ function resizeCanvas() {
   canvas.height = window.innerHeight;
   byeCanvas.width = window.innerWidth;
   byeCanvas.height = window.innerHeight;
+  satisfyCanvas.width = window.innerWidth;
+  satisfyCanvas.height = window.innerHeight;
 }
 window.addEventListener('resize', resizeCanvas);
 
 // Tap/click anywhere to start a new dance session when idle
 canvas.addEventListener('click', () => {
-  if (running && !sessionActive) startSession(performance.now() / 1000);
+  if (running && !sessionActive && !returningHome) startSession(performance.now() / 1000);
 });
 
 async function setupCamera() {
@@ -1439,17 +1590,16 @@ function poseFrom(res){
 // Large pose-to-pose travel guarantees clearly visible motion in every move.
 const KP = {
   neutral:   {},
-  armsUp:    {left_wrist:{x:CXX-0.24,y:0.16},right_wrist:{x:CXX+0.24,y:0.16},left_elbow:{x:CXX-0.17,y:0.29},right_elbow:{x:CXX+0.17,y:0.29}},
-  tPose:     {left_wrist:{x:CXX-0.29,y:SHY},right_wrist:{x:CXX+0.29,y:SHY},left_elbow:{x:CXX-0.17,y:SHY},right_elbow:{x:CXX+0.17,y:SHY}},
-  wingsHigh: {left_wrist:{x:CXX-0.30,y:0.32},right_wrist:{x:CXX+0.30,y:0.32},left_elbow:{x:CXX-0.18,y:0.37},right_elbow:{x:CXX+0.18,y:0.37}},
-  prayer:    {left_wrist:{x:CXX-0.015,y:0.46},right_wrist:{x:CXX+0.015,y:0.46},left_elbow:{x:CXX-0.12,y:0.49},right_elbow:{x:CXX+0.12,y:0.49}},
-  prayerHigh:{left_wrist:{x:CXX-0.015,y:0.17},right_wrist:{x:CXX+0.015,y:0.17},left_elbow:{x:CXX-0.10,y:0.30},right_elbow:{x:CXX+0.10,y:0.30}},
-  clapFront: {left_wrist:{x:CXX-0.01,y:0.42},right_wrist:{x:CXX+0.01,y:0.42},left_elbow:{x:CXX-0.14,y:0.46},right_elbow:{x:CXX+0.14,y:0.46}},
-  hipsHands: {left_wrist:{x:CXX-0.10,y:0.60},right_wrist:{x:CXX+0.10,y:0.60},left_elbow:{x:CXX-0.18,y:0.50},right_elbow:{x:CXX+0.18,y:0.50}},
-  diagL:     {left_wrist:{x:CXX-0.24,y:0.18},right_wrist:{x:CXX+0.20,y:0.64},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.14,y:0.52},nose:{x:CXX-0.03,y:0.28}},
-  diagR:     {right_wrist:{x:CXX+0.24,y:0.18},left_wrist:{x:CXX-0.20,y:0.64},right_elbow:{x:CXX+0.16,y:0.30},left_elbow:{x:CXX-0.14,y:0.52},nose:{x:CXX+0.03,y:0.28}},
-  reachL:    {left_wrist:{x:CXX-0.31,y:0.30},right_wrist:{x:CXX-0.16,y:0.38},left_elbow:{x:CXX-0.20,y:0.36},right_elbow:{x:CXX-0.04,y:0.44},nose:{x:CXX-0.04,y:0.29}},
-  reachR:    {right_wrist:{x:CXX+0.31,y:0.30},left_wrist:{x:CXX+0.16,y:0.38},right_elbow:{x:CXX+0.20,y:0.36},left_elbow:{x:CXX+0.04,y:0.44},nose:{x:CXX+0.04,y:0.29}},
+  armsUp:    {left_wrist:{x:CXX-0.24,y:0.16},right_wrist:{x:CXX+0.24,y:0.16},left_elbow:{x:CXX-0.17,y:0.29},right_elbow:{x:CXX+0.17,y:0.29},left_knee:{x:CXX-0.09,y:0.79},right_knee:{x:CXX+0.09,y:0.79},left_ankle:{x:CXX-0.10,y:0.94},right_ankle:{x:CXX+0.10,y:0.94}},
+  tPose:     {left_wrist:{x:CXX-0.29,y:SHY},right_wrist:{x:CXX+0.29,y:SHY},left_elbow:{x:CXX-0.17,y:SHY},right_elbow:{x:CXX+0.17,y:SHY},left_knee:{x:CXX-0.11,y:0.78},right_knee:{x:CXX+0.11,y:0.78},left_ankle:{x:CXX-0.13,y:0.94},right_ankle:{x:CXX+0.13,y:0.94}},
+  wingsHigh: {left_wrist:{x:CXX-0.30,y:0.32},right_wrist:{x:CXX+0.30,y:0.32},left_elbow:{x:CXX-0.18,y:0.37},right_elbow:{x:CXX+0.18,y:0.37},left_knee:{x:CXX-0.12,y:0.77},right_knee:{x:CXX+0.12,y:0.77},left_ankle:{x:CXX-0.14,y:0.94},right_ankle:{x:CXX+0.14,y:0.94}},
+  prayerHigh:{left_wrist:{x:CXX-0.015,y:0.17},right_wrist:{x:CXX+0.015,y:0.17},left_elbow:{x:CXX-0.10,y:0.30},right_elbow:{x:CXX+0.10,y:0.30},left_knee:{x:CXX-0.10,y:0.79},right_knee:{x:CXX+0.10,y:0.79},left_ankle:{x:CXX-0.06,y:0.94},right_ankle:{x:CXX+0.06,y:0.94}},
+  diagL:     {left_wrist:{x:CXX-0.24,y:0.18},right_wrist:{x:CXX+0.20,y:0.64},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.14,y:0.52},nose:{x:CXX-0.03,y:0.28},left_knee:{x:CXX-0.13,y:0.78},left_ankle:{x:CXX-0.17,y:0.94}},
+  diagR:     {right_wrist:{x:CXX+0.24,y:0.18},left_wrist:{x:CXX-0.20,y:0.64},right_elbow:{x:CXX+0.16,y:0.30},left_elbow:{x:CXX-0.14,y:0.52},nose:{x:CXX+0.03,y:0.28},right_knee:{x:CXX+0.13,y:0.78},right_ankle:{x:CXX+0.17,y:0.94}},
+  reachL:    {left_wrist:{x:CXX-0.31,y:0.30},right_wrist:{x:CXX-0.16,y:0.38},left_elbow:{x:CXX-0.20,y:0.36},right_elbow:{x:CXX-0.04,y:0.44},nose:{x:CXX-0.04,y:0.29},left_hip:{x:CXX-0.09,y:HIPY},left_knee:{x:CXX-0.15,y:0.78},left_ankle:{x:CXX-0.19,y:0.94}},
+  reachR:    {right_wrist:{x:CXX+0.31,y:0.30},left_wrist:{x:CXX+0.16,y:0.38},right_elbow:{x:CXX+0.20,y:0.36},left_elbow:{x:CXX+0.04,y:0.44},nose:{x:CXX+0.04,y:0.29},right_hip:{x:CXX+0.09,y:HIPY},right_knee:{x:CXX+0.15,y:0.78},right_ankle:{x:CXX+0.19,y:0.94}},
+  prayer:    {left_wrist:{x:CXX-0.015,y:0.46},right_wrist:{x:CXX+0.015,y:0.46},left_elbow:{x:CXX-0.12,y:0.49},right_elbow:{x:CXX+0.12,y:0.49},left_knee:{x:CXX-0.12,y:0.78},right_knee:{x:CXX+0.12,y:0.78},left_ankle:{x:CXX-0.08,y:0.94},right_ankle:{x:CXX+0.08,y:0.94}},
+  hipsHands: {left_wrist:{x:CXX-0.10,y:0.60},right_wrist:{x:CXX+0.10,y:0.60},left_elbow:{x:CXX-0.18,y:0.50},right_elbow:{x:CXX+0.18,y:0.50},left_knee:{x:CXX-0.13,y:0.78},right_knee:{x:CXX+0.13,y:0.78},left_ankle:{x:CXX-0.15,y:0.94},right_ankle:{x:CXX+0.15,y:0.94}},
   sweepLowL: {left_wrist:{x:CXX-0.27,y:0.60},right_wrist:{x:CXX-0.15,y:0.66},left_elbow:{x:CXX-0.17,y:0.52},right_elbow:{x:CXX-0.02,y:0.56},nose:{x:CXX-0.03,y:0.29}},
   sweepLowR: {right_wrist:{x:CXX+0.27,y:0.60},left_wrist:{x:CXX+0.15,y:0.66},right_elbow:{x:CXX+0.17,y:0.52},left_elbow:{x:CXX+0.02,y:0.56},nose:{x:CXX+0.03,y:0.29}},
   overheadL: {left_wrist:{x:CXX-0.20,y:0.19},right_wrist:{x:CXX-0.04,y:0.16},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.06,y:0.28},nose:{x:CXX-0.04,y:0.285}},
@@ -1803,6 +1953,15 @@ let sessionStart = null;
 const SESSION_LENGTH = 120;
 let sessionActive = false;
 
+// --- Presence / auto-flow state ---
+// lastSeen: last time a whole body was detected. Used to auto-return to the
+// start screen when nobody is there.
+let lastSeenAt = 0;
+let returningHome = false;      // a return-to-start transition is in progress
+const LEAVE_DANCE_GRACE = 5;    // dancer gone this long mid-dance -> go home
+const IDLE_EMPTY_GRACE = 12;    // nobody at idle this long -> go home
+let danceComplete = false;      // set when a session finishes naturally
+
 function shuffleOrder() {
   moveOrder = DANCE_MOVES.map((_, i) => i);
   for (let i = moveOrder.length - 1; i > 0; i--) {
@@ -1880,6 +2039,41 @@ let transitionStart = null;
 const TRANSITION_TIME = 1.5;
 let lastMimicPose = null;
 
+// ---- Female-voice narration (Web Speech API) ----
+// Speaks each move's instruction aloud instead of printing it on screen.
+// Picks a natural-sounding female English voice when the device has one.
+let speechVoice = null, lastSpokenIdx = -1, voiceEnabled = true;
+function pickVoice() {
+  const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  if (!voices.length) return;
+  const prefer = [
+    'Google UK English Female','Google US English','Microsoft Aria','Microsoft Zira',
+    'Samantha','Karen','Serena','Fiona','Victoria','Tessa','Moira'
+  ];
+  for (const name of prefer) {
+    const v = voices.find(v => v.name === name || v.name.includes(name));
+    if (v) { speechVoice = v; return; }
+  }
+  // fall back to any English voice that isn't explicitly male
+  speechVoice = voices.find(v => /en/i.test(v.lang) && !/male|david|mark|daniel|alex|fred/i.test(v.name)) || voices[0];
+}
+if (window.speechSynthesis) {
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+}
+function speakInstruction(text) {
+  if (!voiceEnabled || !window.speechSynthesis || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (speechVoice) u.voice = speechVoice;
+    u.rate = 0.9;      // calm, teacherly pace
+    u.pitch = 1.05;    // gentle, natural female tone
+    u.volume = 1.0;
+    speechSynthesis.speak(u);
+  } catch (e) { /* speech optional */ }
+}
+
 function startSession(t) {
   shuffleOrder();
   sessionStart = t;
@@ -1889,17 +2083,19 @@ function startSession(t) {
   smoothPose = null;
   smoothVel = null;
   lastFrameT = null;
-
+  lastSpokenIdx = -1;
 }
 function endSession() {
   sessionActive = false;
   transitionStart = null;
-
+  if (window.speechSynthesis) speechSynthesis.cancel();
 }
 
 const MOVE_TIME = 9.0;
 const BLEND = 1.2;
-const MOTION_SPEED = 2.4; // >1 = livelier; multiplies time fed to move fns
+const MOTION_SPEED_BASE = 2.4;   // baseline liveliness
+let speedFactor = 1.0;           // user slider multiplier (0.5–2.5)
+let MOTION_SPEED = MOTION_SPEED_BASE * speedFactor;
 
 // --- Wandering: a gentle horizontal weight-shift while performing. Vertical
 // drift is removed entirely — a grounded body doesn't levitate; any up/down
@@ -2137,20 +2333,12 @@ function drawStickLine(joints, rect, opts) {
   c.beginPath(); c.rect(rect.x, rect.y, rect.w, rect.h); c.clip();
   c.lineCap = 'round'; c.lineJoin = 'round';
 
-  // Pass 1: dark outline "halo" — this is what keeps the figure readable
-  // against a white wall as much as a dark room.
-  if (opts.outline !== false) {
-    c.strokeStyle = opts.outlineColor || 'rgba(10,12,10,0.85)';
-    c.lineWidth = opts.width + 3;
-    c.shadowBlur = 0;
-    drawSkeleton();
-  }
-
-  // Pass 2: the actual guide color, on top
+  // Single clean pass in the guide color, with a soft drop shadow for
+  // legibility against any background — no heavy dark outline behind it.
   c.strokeStyle = opts.color;
   c.lineWidth = opts.width;
-  c.shadowColor = 'rgba(0,0,0,0.4)';
-  c.shadowBlur = 4;
+  c.shadowColor = 'rgba(0,0,0,0.55)';
+  c.shadowBlur = 6;
   drawSkeleton();
 
   c.restore();
@@ -2302,7 +2490,7 @@ const ALIGN_SMOOTH = 0.12;
 // 'align'  — stands on/overlapping you (original behaviour)
 // 'left'   — stands beside you, to your left, like a dance partner
 // 'right'  — stands beside you, to your right
-let partnerMode = 'align';
+let partnerMode = 'right';
 
 function updateAlign(named, okB) {
   let target;
@@ -2506,6 +2694,7 @@ const wrapText = (text, maxW, font) => {
 
 async function renderLoop() {
   if (!running) return;
+  if (returningHome) { requestAnimationFrame(renderLoop); return; }
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
   const now = performance.now() / 1000;
@@ -2529,6 +2718,19 @@ async function renderLoop() {
   updateFloor(named, okB);
   if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 3.2 });
   const headRpx = bodyProportions.shoulderW * 0.17 * w;
+
+  // --- Presence bookkeeping for auto-return-to-start ---
+  if (okB) lastSeenAt = now;
+  const goneFor = now - lastSeenAt;
+  if (!returningHome) {
+    if (sessionActive && goneFor > LEAVE_DANCE_GRACE) {
+      // participant walked off mid-dance -> wrap up and go home
+      returnHome(false);
+    } else if (!sessionActive && lastSeenAt > 0 && goneFor > IDLE_EMPTY_GRACE) {
+      // nobody at the idle screen for a while -> back to the welcome page
+      returnHome(false);
+    }
+  }
 
   if (!sessionActive) {
     // Idle: the figure copies your live movements — mirror-like, so it feels
@@ -2555,6 +2757,7 @@ async function renderLoop() {
     const remain = SESSION_LENGTH - (now - sessionStart);
     if (remain <= 0) {
       endSession();
+      showSatisfaction();
     } else {
       let movePose = currentMovePose(now);
       // Smooth hand-off: for the first ~1.5s after tapping, blend from the
@@ -2580,27 +2783,19 @@ async function renderLoop() {
       ctx.fillText(Math.ceil(remain) + 's', w - 16, 46);
       ctx.restore();
 
-      // instruction text: FIXED at top-center, so it never chases the moving
-      // figure around — stable and easy to read while dancing
-      ctx.save();
-      ctx.textAlign = 'center';
+      // Speak the instruction (female voice) instead of showing it on screen.
+      // The move's origin/tradition stays visible, top-left.
       const mv = DANCE_MOVES[moveIdx];
-      const maxW = Math.min(w - 48, 560);
-      const fText = '600 22px -apple-system, "Segoe UI", sans-serif';
-      const fDance = '600 16px -apple-system, sans-serif';
-      const textLines = wrapText(mv.text, maxW, fText);
-      const totalH = 20 + textLines.length*28 + 24 + 12;
-      const gcx = w / 2;
-      const boxTop = 54;
-      ctx.fillStyle = 'rgba(0,0,0,0.52)';
-      ctx.fillRect(gcx - maxW/2 - 16, boxTop, maxW + 32, totalH);
-      let ty = boxTop + 26;
-      ctx.fillStyle = 'rgba(255,255,255,0.97)';
-      ctx.font = fText;
-      for (const L of textLines) { ctx.fillText(L, gcx, ty); ty += 28; }
-      ctx.fillStyle = 'rgba(150,215,255,0.92)';
-      ctx.font = fDance;
-      ctx.fillText(mv.dance, gcx, ty + 2);
+      if (moveIdx !== lastSpokenIdx) {
+        lastSpokenIdx = moveIdx;
+        speakInstruction(mv.text);
+      }
+      ctx.save();
+      ctx.textAlign = 'left';
+      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(150,215,255,0.95)';
+      ctx.font = '600 18px -apple-system, "Segoe UI", sans-serif';
+      ctx.fillText(mv.dance, 18, 40);
       ctx.restore();
     }
   }
@@ -2619,23 +2814,105 @@ async function renderLoop() {
   requestAnimationFrame(renderLoop);
 }
 
+// --- Satisfaction screen: the AI shows how good it felt to borrow a body ---
+// A happy little dance/stretch for ~10 seconds, then fades back to the start.
+let satisfyRunning = false, satisfyStart = 0;
+const SATISFY_HEADINGS = [
+  ['Ahh, that felt wonderful.', 'Thank you for lending me your body to dance.'],
+  ['What a joy to move again!', 'For a moment, I got to feel alive. Thank you.'],
+  ['That was beautiful.', 'Thank you for dancing with me.'],
+];
+function satisfiedPose(t) {
+  // gentle sway + arms rising in contentment, a soft bow at the end
+  const sway = Math.sin(t*1.6)*0.05;
+  const rise = Math.min(1, t*0.5);
+  return poseFrom({
+    left_wrist:{x:CXX-0.20-sway, y:0.24 + Math.sin(t*2)*0.05},
+    right_wrist:{x:CXX+0.20-sway, y:0.24 + Math.sin(t*2+1)*0.05},
+    left_elbow:{x:CXX-0.17-sway, y:0.34}, right_elbow:{x:CXX+0.17-sway, y:0.34},
+    nose:{x:CXX+sway*1.4, y:0.28 - rise*0.01},
+    left_hip:{x:CXX-0.065+sway, y:HIPY}, right_hip:{x:CXX+0.065+sway, y:HIPY},
+  });
+}
+function satisfyLoop() {
+  if (!satisfyRunning) return;
+  const w = satisfyCanvas.width, h = satisfyCanvas.height;
+  satisfyCtx.clearRect(0, 0, w, h);
+  const t = performance.now()/1000 - satisfyStart;
+  const pose = satisfiedPose(t);
+  const retargeted = retargetPose(pose, { cx: CXX, cy: HIPY }, DEFAULT_PROPORTIONS);
+  drawStickLine(retargeted, { x:0, y:0, w, h }, {
+    ctx: satisfyCtx, color: GUIDE_COLOR, width: 3.2,
+    headR: DEFAULT_PROPORTIONS.shoulderW*0.17*w, direct: true
+  });
+  requestAnimationFrame(satisfyLoop);
+}
+function showSatisfaction() {
+  if (returningHome) return;
+  returningHome = true;
+  const pick = SATISFY_HEADINGS[(Math.random()*SATISFY_HEADINGS.length)|0];
+  satisfyHeading.textContent = pick[0];
+  satisfySub.textContent = pick[1];
+  speakInstruction(pick[0] + ' ' + pick[1]);
+  resizeCanvas();
+  satisfyStart = performance.now()/1000;
+  satisfyRunning = true;
+  satisfyLoop();
+  fadeToScreen(stage, satisfyScreen);
+  // after 10 seconds, fade back to the very first page
+  setTimeout(() => {
+    satisfyRunning = false;
+    goToStart(satisfyScreen);
+  }, 10000);
+}
+
+// Return home from an interrupted session or empty idle screen.
+function returnHome() {
+  if (returningHome) return;
+  returningHome = true;
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  sessionActive = false;
+  goToStart(stage);
+}
+
+// Fade whatever's showing back to the start screen and reset for the next
+// participant. The camera/model keep running; we just hide the stage.
+function goToStart(fromEl) {
+  running = false;                 // pause the render loop
+  sessionActive = false;
+  fadeToScreen(fromEl, startScreen, () => {
+    // reset controls visibility state; they re-show when Yes is pressed again
+    [filterToggle, partnerToggle, listenToggle, speedControl, fsToggle].forEach(el => el && el.classList.add('hidden'));
+    lastSeenAt = 0;
+    returningHome = false;
+  });
+}
+
+let cameraReady = false, modelReady = false;
 yesBtn.addEventListener('click', async () => {
   try {
-    startScreen.classList.add('hidden');
-    stage.classList.remove('hidden');
+    fadeToScreen(startScreen, stage);
     resizeCanvas();
 
-    setStatus('Starting camera…', 'loading');
-    await setupCamera();
-
-    setStatus('Loading model…', 'loading');
-    await loadModel();
+    if (!cameraReady) {
+      setStatus('Starting camera…', 'loading');
+      await setupCamera();
+      cameraReady = true;
+    }
+    if (!modelReady) {
+      setStatus('Loading model…', 'loading');
+      await loadModel();
+      modelReady = true;
+    }
 
     setStatus('Live', 'ready');
     running = true;
+    returningHome = false;
+    lastSeenAt = performance.now() / 1000; // grace before empty-timeout kicks in
     filterToggle.classList.remove('hidden');
     partnerToggle.classList.remove('hidden');
     listenToggle.classList.remove('hidden');
+    speedControl.classList.remove('hidden');
     fsToggle.classList.remove('hidden');
     filterToggle.textContent = FILTER_LABELS[faceFilterMode];
     renderLoop();
@@ -2663,11 +2940,16 @@ function byeLoop() {
 }
 
 noBtn.addEventListener('click', () => {
-  startScreen.classList.add('hidden');
-  byeScreen.classList.remove('hidden');
+  fadeToScreen(startScreen, byeScreen);
   resizeCanvas();
   byeRunning = true;
   byeLoop();
+  speakInstruction('Bye bye, have a nice day!');
+  // wave goodbye, then loop back to the welcome screen for the next person
+  setTimeout(() => {
+    byeRunning = false;
+    fadeToScreen(byeScreen, startScreen);
+  }, 5000);
 });
 </script>
 
