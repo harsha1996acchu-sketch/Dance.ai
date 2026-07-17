@@ -1984,11 +1984,11 @@ const DANCE_MOVES = [
 
 let moveIdx = 0, move0 = null;
 
-// ---- Session system: 2-minute dance per participant ----
+// ---- Session system: 1-minute dance per participant ----
 let moveOrder = DANCE_MOVES.map((_, i) => i);
 let orderPos = 0;
 let sessionStart = null;
-const SESSION_LENGTH = 120;
+const SESSION_LENGTH = 60;
 let sessionActive = false;
 
 // --- Presence / auto-flow state ---
