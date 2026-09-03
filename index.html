@@ -3,361 +3,76 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Dance Mirror — Proof of Concept</title>
-<!--
-  DEVICE COMPATIBILITY
-  This is a single self-contained HTML file — no build step, no server-side
-  logic. It runs identically on:
-    - Phone / tablet browsers (touch tap-to-start, front camera)
-    - Laptop / PC browsers (mouse click, any webcam)
-    - Raspberry Pi (Chromium in kiosk mode) + USB webcam, for the exhibition
-  All pose detection (TensorFlow.js + MoveNet) runs client-side in the
-  browser — nothing is uploaded, nothing needs a network connection once the
-  page and model have loaded once. Camera access uses a soft "facingMode"
-  preference (ignored by plain USB/laptop webcams, honored on phones/tablets)
-  with a plain-video fallback for cameras that reject the constraint outright.
--->
+<title>AI + Bodies — 3D Dance Mirror</title>
 <style>
-  :root {
-    --ink: #0d0f0c;
-    --paper: #f2efe6;
-    --line: #2f6f4f;
-    --guide: #5ee2ff;
-    --muted: #7a8577;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0;
-    background: var(--ink);
-    color: var(--paper);
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-    height: 100%;
-    overflow: hidden;
-  }
-  #stage {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    background: #000;
-  }
-  video, canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  video {
-    transform: scaleX(-1);
-    visibility: hidden;
-  }
-  #ui {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    padding: env(safe-area-inset-top, 16px) 16px 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
-    z-index: 10;
-    pointer-events: none;
-  }
-  #title {
-    font-size: 13px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    opacity: 0.85;
-  }
-  #status {
-    font-size: 11px;
-    padding: 5px 10px;
-    border-radius: 12px;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(255,255,255,0.15);
-    max-width: 55vw;
-    text-align: right;
-    word-break: break-word;
-  }
-  #status.ready { color: #9be3a8; border-color: rgba(155,227,168,0.4); }
-  #status.loading { color: #e3c99b; }
-  #status.error { color: #e39b9b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden;
+    font-family: -apple-system, "Segoe UI", sans-serif; color: #fff; }
+  #app { position: fixed; inset: 0; display: flex; }
+  #guideWrap { position: relative; flex: 1 1 60%; height: 100%; }
+  #camWrap { position: relative; flex: 1 1 40%; height: 100%; border-left: 1px solid rgba(255,255,255,0.12); }
+  #three { position: absolute; inset: 0; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); visibility: hidden; }
+  #camCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-  #bottom {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    padding: 16px 16px env(safe-area-inset-bottom, 16px);
-    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .hidden { display: none !important; }
+  .brand { position: absolute; top: 22px; left: 26px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; z-index: 6; }
+  #guideText { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 6; width: 90%; }
+  #gName { font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; }
+  #gRegion { font-size: 14px; color: #7fd7ff; margin-top: 3px; }
+  #gText { font-size: clamp(13px, 1.4vw, 16px); color: #eee; margin-top: 6px; }
+  #timer { position: absolute; top: 20px; right: 20px; z-index: 6; font-size: 22px; font-weight: 700; }
+  #camLabel { position: absolute; top: 16px; left: 16px; z-index: 6; font-size: 13px; color: #cfc; letter-spacing:0.08em; }
 
-  #startBtn, .consentBtn {
-    -webkit-appearance: none;
-    border: none;
-    background: var(--paper);
-    color: var(--ink);
-    font-size: 15px;
-    font-weight: 600;
-    padding: 14px;
-    border-radius: 10px;
-    letter-spacing: 0.01em;
-  }
-  #startBtn:active { opacity: 0.8; }
+  /* consent / start screen */
+  #startScreen, #byeScreen { position: absolute; inset: 0; z-index: 20; background: #050505;
+    display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 32px; }
+  .startBrand { position: absolute; top: 28px; left: 34px; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+  .askText { font-size: clamp(34px, 6vw, 66px); font-weight: 700; max-width: 1000px; line-height: 1.2; }
+  .subText { font-size: 16px; color: #999; max-width: 440px; line-height: 1.5; margin: 22px 0 34px; }
+  #consentBtns { display: flex; gap: 14px; }
+  .consentBtn { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.3); background: transparent;
+    color: #fff; font-size: 17px; font-weight: 600; padding: 14px 40px; border-radius: 10px; cursor: pointer; }
+  .consentBtn.yes { background: #2a7d52; border-color: #2a7d52; }
+  #byeScreen h1 { font-size: clamp(28px,4vw,44px); font-weight: 700; }
 
-  #startScreen {
-    position: absolute;
-    inset: 0;
-    background: var(--ink);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 32px;
-    text-align: center;
-  }
-  /* Smooth cross-fade for every full-screen overlay */
-  #startScreen, #byeScreen, #satisfyScreen {
-    transition: opacity 0.6s ease;
-  }
-  .fadeOut { opacity: 0 !important; pointer-events: none; }
-
-  #adminRefresh {
-    position: fixed;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    background: rgba(0,0,0,0.35);
-    color: rgba(255,255,255,0.55);
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    -webkit-appearance: none;
-    opacity: 0.35;
-    transition: opacity 0.2s ease;
-  }
-  #adminRefresh:hover { opacity: 1; }
-  #startScreen h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0 0 8px;
-    letter-spacing: -0.01em;
-  }
-  #startScreen .askText {
-    font-size: 30px;
-    font-weight: 600;
-    color: var(--paper);
-    max-width: 420px;
-    line-height: 1.35;
-    margin: 18px 0 10px;
-  }
-  #startScreen .subText {
-    font-size: 12.5px;
-    color: var(--muted);
-    max-width: 300px;
-    line-height: 1.5;
-    margin: 0 0 30px;
-  }
-  #consentBtns {
-    display: flex;
-    gap: 14px;
-    width: 100%;
-    max-width: 320px;
-  }
-  .consentBtn { flex: 1; }
-  .consentBtn.yes { background: var(--line); color: var(--paper); }
-  .consentBtn.no { background: transparent; border: 1px solid rgba(242,239,230,0.35); color: var(--paper); }
-  .consentBtn:active { opacity: 0.8; }
-
-  #byeScreen {
-    position: absolute;
-    inset: 0;
-    background: var(--ink);
-    z-index: 20;
-    overflow: hidden;
-  }
-  #byeCanvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-  }
-  #byeText {
-    position: absolute;
-    top: 12%;
-    left: 0; right: 0;
-    text-align: center;
-    padding: 0 32px;
-  }
-  #byeText h1 {
-    font-size: 22px;
-    font-weight: 600;
-    margin: 0 0 10px;
-  }
-  #byeText p {
-    font-size: 15px;
-    color: var(--muted);
-    margin: 0;
-  }
-
-  #satisfyScreen {
-    position: absolute;
-    inset: 0;
-    background: var(--ink);
-    z-index: 21;
-    overflow: hidden;
-  }
-  #satisfyCanvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-  }
-  #satisfyText {
-    position: absolute;
-    top: 10%;
-    left: 0; right: 0;
-    text-align: center;
-    padding: 0 32px;
-  }
-  #satisfyText h1 {
-    font-size: 24px;
-    font-weight: 600;
-    margin: 0 0 10px;
-    color: var(--paper);
-  }
-  #satisfyText p {
-    font-size: 15px;
-    color: #ffe4a3;
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  #filterToggle {
-    position: absolute;
-    left: 16px;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 96px);
-    z-index: 12;
-    -webkit-appearance: none;
-    border: 1px solid rgba(255,180,120,0.5);
-    background: rgba(255,180,120,0.14);
-    color: #ffd9b0;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 20px;
-  }
-  #filterToggle:active { background: rgba(255,180,120,0.28); }
-
-  #fsToggle {
-    position: absolute;
-    top: env(safe-area-inset-top, 16px);
-    right: 16px;
-    margin-top: 44px;
-    z-index: 12;
-    -webkit-appearance: none;
-    border: 1px solid rgba(255,255,255,0.4);
-    background: rgba(255,255,255,0.12);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 20px;
-  }
-  #fsToggle:active { background: rgba(255,255,255,0.25); }
-
-  #partnerToggle {
-    position: absolute;
-    left: 16px;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 52px);
-    z-index: 12;
-    -webkit-appearance: none;
-    border: 1px solid rgba(255,201,74,0.55);
-    background: rgba(255,201,74,0.14);
-    color: #ffe4a3;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 20px;
-  }
-  #partnerToggle:active { background: rgba(255,201,74,0.28); }
-
-  #listenToggle {
-    position: absolute;
-    left: 16px;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 8px);
-    z-index: 12;
-    -webkit-appearance: none;
-    border: 1px solid rgba(90,220,140,0.55);
-    background: rgba(90,220,140,0.14);
-    color: #b6f2ce;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 20px;
-  }
-  #listenToggle:active { background: rgba(90,220,140,0.28); }
-  #listenToggle.on {
-    border-color: rgba(90,220,140,0.9);
-    background: rgba(90,220,140,0.32);
-    color: #eafff2;
-  }
-
-  #speedControl {
-    position: absolute;
-    right: 16px;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 8px);
-    z-index: 12;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 20px;
-    padding: 6px 12px;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  #speedControl label { opacity: 0.8; }
-  #speedSlider { width: 90px; accent-color: #ffc94a; }
-  #speedValue { min-width: 30px; text-align: right; opacity: 0.9; }
-
-  #danceProgressWrap {
-    margin-bottom: 2px;
-  }
-  #danceProgressBar {
-    width: 100%;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255,255,255,0.15);
-    overflow: hidden;
-    margin-bottom: 5px;
-  }
-  #danceProgressFill {
-    height: 100%;
-    width: 0%;
-    background: var(--guide);
-  }
-  #danceTimeLabel {
-    font-size: 11px;
-    color: var(--muted);
-  }
+  #controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 6;
+    display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15); padding: 9px 13px; border-radius: 999px; backdrop-filter: blur(8px); }
+  #controls.hidden, .hidden { display: none !important; }
+  button.ctl { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  button.ctl.on { background: #2a7d52; border-color: #2a7d52; }
+  #speedWrap { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  #speedSlider { width: 80px; accent-color: #ffc94a; }
+  #status { position: absolute; bottom: 62px; left: 50%; transform: translateX(-50%); z-index:6; font-size: 12px; color:#aaa; }
 </style>
 </head>
 <body>
+<div id="app">
+  <div id="guideWrap">
+    <div id="three"></div>
+    <div class="brand">AI + Bodies</div>
+    <div id="guideText" class="hidden">
+      <div id="gName">—</div><div id="gRegion"></div><div id="gText"></div>
+    </div>
+    <div id="timer" class="hidden"></div>
+  </div>
+  <div id="camWrap">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="camCanvas"></canvas>
+    <div id="camLabel">YOU</div>
+  </div>
+</div>
 
-<button id="adminRefresh" title="Admin: restart">⟳</button>
-
+<div id="controls" class="hidden">
+  <button id="listenBtn" class="ctl">🎤 Listen</button>
+  <div id="speedWrap"><span>Speed</span><input id="speedSlider" type="range" min="0.3" max="2.0" step="0.1" value="1"><span id="speedVal">1.0×</span></div>
+  <button id="fsBtn" class="ctl">⛶ Fullscreen</button>
+</div>
+<div id="status" class="hidden"></div>
 
 <div id="startScreen">
-  <h1>AI + Bodies</h1>
+  <div class="startBrand">AI + Bodies</div>
   <p class="askText">Can I borrow your body for a dance?</p>
   <p class="subText">Your face is never shown or recorded. Everything runs offline, right here on this device.</p>
   <div id="consentBtns">
@@ -365,236 +80,27 @@
     <button id="noBtn" class="consentBtn no">No</button>
   </div>
 </div>
-
-<div id="byeScreen" class="hidden">
-  <canvas id="byeCanvas"></canvas>
-  <div id="byeText">
-    <h1>Thank you for participating</h1>
-    <p>Bye bye, have a nice day! 👋</p>
-  </div>
-</div>
-
-<div id="satisfyScreen" class="hidden">
-  <canvas id="satisfyCanvas"></canvas>
-  <div id="satisfyText">
-    <h1 id="satisfyHeading">Ahh, that felt wonderful.</h1>
-    <p id="satisfySub">Thank you for lending me your body to dance.</p>
-  </div>
-</div>
-
-<div id="stage" class="hidden">
-  <div id="ui">
-    <div id="title">Dance Mirror · v2-balanced</div>
-    <div id="status" class="loading">Loading model…</div>
-  </div>
-
-  <button id="filterToggle" class="hidden">Filter: Off</button>
-  <button id="partnerToggle" class="hidden">Partner: Stand Right</button>
-  <button id="listenToggle" class="hidden">🎤 Listen: Off</button>
-  <div id="speedControl" class="hidden">
-    <label for="speedSlider">Speed</label>
-    <input id="speedSlider" type="range" min="0.5" max="2.5" step="0.1" value="1">
-    <span id="speedValue">1.0×</span>
-  </div>
-  <button id="fsToggle" class="hidden">⛶ Fullscreen</button>
-
-  <video id="video" playsinline autoplay muted></video>
-  <canvas id="overlay"></canvas>
-
-  <div id="bottom">
-    <div id="danceProgressWrap" class="hidden">
-      <div id="danceProgressBar"><div id="danceProgressFill"></div></div>
-      <div id="danceTimeLabel">0:00 / 0:00</div>
-    </div>
-  </div>
-</div>
+<div id="byeScreen" class="hidden"><h1>Thank you for participating</h1></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
 
-<script>
-const startScreen = document.getElementById('startScreen');
-const yesBtn = document.getElementById('yesBtn');
-const noBtn = document.getElementById('noBtn');
-const byeScreen = document.getElementById('byeScreen');
-const byeCanvas = document.getElementById('byeCanvas');
-const byeCtx = byeCanvas.getContext('2d');
-const satisfyScreen = document.getElementById('satisfyScreen');
-const satisfyCanvas = document.getElementById('satisfyCanvas');
-const satisfyCtx = satisfyCanvas.getContext('2d');
-const satisfyHeading = document.getElementById('satisfyHeading');
-const satisfySub = document.getElementById('satisfySub');
-const stage = document.getElementById('stage');
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// Smoothly cross-fade one full-screen overlay to another. Fades the current
-// one out, then reveals the next and fades it in. Used for every page move.
-function fadeToScreen(hideEl, showEl, onShown) {
-  if (hideEl) {
-    hideEl.classList.add('fadeOut');
-    setTimeout(() => { hideEl.classList.add('hidden'); hideEl.classList.remove('fadeOut'); }, 600);
-  }
-  if (showEl) {
-    showEl.classList.remove('hidden');
-    showEl.classList.add('fadeOut');
-    // next frame, remove fadeOut so it transitions in
-    requestAnimationFrame(() => requestAnimationFrame(() => showEl.classList.remove('fadeOut')));
-  }
-  if (onShown) setTimeout(onShown, 620);
-}
-const video = document.getElementById('video');
-const canvas = document.getElementById('overlay');
-const ctx = canvas.getContext('2d');
-const statusEl = document.getElementById('status');
-const danceProgressWrap = document.getElementById('danceProgressWrap');
-const danceProgressFill = document.getElementById('danceProgressFill');
-const danceTimeLabel = document.getElementById('danceTimeLabel');
-const filterToggle = document.getElementById('filterToggle');
-const partnerToggle = document.getElementById('partnerToggle');
-const listenToggle = document.getElementById('listenToggle');
-const speedControl = document.getElementById('speedControl');
-const speedSlider = document.getElementById('speedSlider');
-const speedValue = document.getElementById('speedValue');
-speedSlider.addEventListener('input', () => {
-  speedFactor = parseFloat(speedSlider.value);
-  MOTION_SPEED = MOTION_SPEED_BASE * speedFactor;
-  speedValue.textContent = speedFactor.toFixed(1) + '×';
-});
-const fsToggle = document.getElementById('fsToggle');
-const PARTNER_LABELS = { align: 'Partner: Overlap', left: 'Partner: Stand Left', right: 'Partner: Stand Right' };
-partnerToggle.addEventListener('click', () => {
-  partnerMode = partnerMode === 'align' ? 'left' : partnerMode === 'left' ? 'right' : 'align';
-  partnerToggle.textContent = PARTNER_LABELS[partnerMode];
-});
-listenToggle.addEventListener('click', async () => {
-  if (!micActive) {
-    listenToggle.textContent = '🎤 …';
-    try {
-      await startMicListen();
-      listenToggle.textContent = '🎤 Listen: On';
-      listenToggle.classList.add('on');
-    } catch (e) {
-      listenToggle.textContent = '🎤 Mic blocked';
-      listenToggle.classList.remove('on');
-      setTimeout(() => { listenToggle.textContent = '🎤 Listen: Off'; }, 1800);
-    }
-  } else {
-    stopMicListen();
-    listenToggle.textContent = '🎤 Listen: Off';
-    listenToggle.classList.remove('on');
-  }
-});
-fsToggle.addEventListener('click', () => {
-  const el = document.documentElement;
-  if (!document.fullscreenElement) {
-    (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen).call(el);
-    fsToggle.textContent = '⛶ Exit';
-  } else {
-    (document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen).call(document);
-    fsToggle.textContent = '⛶ Fullscreen';
-  }
-  setTimeout(resizeCanvas, 300);
-});
-
-let adminReloading = false;
-// --- Admin refresh: the one deliberate way to hard-reset the exhibit ---
-document.getElementById('adminRefresh').addEventListener('click', () => {
-  adminReloading = true;
-  location.reload();
-});
-
-// --- Kiosk hardening: keep casual visitors from leaving the page ---
-// Block the right-click context menu, block text selection/drag, and swallow
-// the common keyboard shortcuts people might use to navigate away or open
-// dev tools. NOTE: a browser cannot fully trap every OS/browser shortcut from
-// JavaScript — for a truly locked-down public kiosk, also launch Chrome in
-// kiosk mode (see the notes I gave you) so the tab bar and menus are gone.
-document.addEventListener('contextmenu', e => e.preventDefault());
-document.addEventListener('selectstart', e => e.preventDefault());
-document.addEventListener('dragstart', e => e.preventDefault());
-window.addEventListener('keydown', (e) => {
-  const k = (e.key || '').toLowerCase();
-  // block: Ctrl/Alt+anything nav, F5/refresh, back/forward, dev tools, tab-switch
-  if (e.ctrlKey || e.metaKey || e.altKey) { e.preventDefault(); return; }
-  if (['f5','f11','f12','backspace'].includes(k)) { e.preventDefault(); return; }
-}, true);
-// Ask for confirmation if something tries to unload (accidental close/refresh)
-window.addEventListener('beforeunload', (e) => {
-  if (adminReloading) return;
-  e.preventDefault();
-  e.returnValue = '';
-});
-
-let detector = null;
-let running = false;
-
-// --- Freeze watchdog ---
-// The render loop stamps lastHeartbeat every frame. This timer runs
-// INDEPENDENTLY (setInterval isn't affected by an rAF stall), so if the loop
-// hasn't drawn for a few seconds while it's supposed to be live, we assume a
-// freeze (bad camera frame, model hiccup, memory stall) and auto-reload to
-// recover — no admin needed. It only acts when the app should be running, so
-// it won't fire on the idle welcome page.
-let lastHeartbeat = performance.now();
-const WATCHDOG_STALL_MS = 4000;
-setInterval(() => {
-  if (!running) { lastHeartbeat = performance.now(); return; }
-  if (performance.now() - lastHeartbeat > WATCHDOG_STALL_MS) {
-    adminReloading = true;   // skip unload confirmation
-    location.reload();
-  }
-}, 1000);
-
-const FILTER_MODES = ['none', 'thermal', 'negative', 'pixel'];
-const FILTER_LABELS = { none: 'Filter: Off', thermal: 'Filter: Thermal', negative: 'Filter: Negative', pixel: 'Blur: Face only' };
-let faceFilterMode = 'none';
-
-filterToggle.addEventListener('click', () => {
-  const i = FILTER_MODES.indexOf(faceFilterMode);
-  faceFilterMode = FILTER_MODES[(i + 1) % FILTER_MODES.length];
-  filterToggle.textContent = FILTER_LABELS[faceFilterMode];
-});
-
-// --- Placeholder "reference dances" ---
-// Each dance is now a SEQUENCE of distinct keyframe poses (6+ moves),
-// interpolated smoothly over time so it reads as real choreography
-// rather than one repeating motion. These remain placeholders — real
-// keypoint sequences from Harsha's dance dataset will replace them.
+/* ============================================================
+   PART 1 — The existing 2D dance engine (reused unchanged).
+   ============================================================ */
+const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
 const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','right_elbow',
   'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
-
-// Base body layout constants
-const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
-// Warm amber reads clearly against a white gallery wall AND a dark room —
-// paired with the dark outline halo in drawStickLine, this is the fix for
-// "the white figure disappears against a white background."
-const GUIDE_COLOR = '#ffc94a';
-
-// The camera's native frame (e.g. 4:3 on a laptop webcam) rarely matches the
-// screen's aspect ratio (very tall on a phone in portrait). Previously the
-// raw video was stretched to fill the screen — squeezing/expanding the
-// picture. camCrop describes a "cover" crop window (in normalized 0..1
-// video-space) that fills the screen with NO distortion, matching CSS
-// object-fit:cover. Every place that maps a detected joint or draws the
-// video onto the canvas uses this same window, so the tracked skeleton
-// stays glued to the (now correctly proportioned) picture of the person.
-let camCrop = { sx: 0, sy: 0, sw: 1, sh: 1 };
-function updateCamCrop(rect) {
-  const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
-  if (!vw || !vh || !rect.w || !rect.h) { camCrop = { sx:0, sy:0, sw:1, sh:1 }; return; }
-  const vAspect = vw / vh, rAspect = rect.w / rect.h;
-  let sw = 1, sh = 1, sx = 0, sy = 0;
-  if (vAspect > rAspect) { sw = rAspect / vAspect; sx = (1 - sw) / 2; }
-  else { sh = vAspect / rAspect; sy = (1 - sh) / 2; }
-  camCrop = { sx, sy, sw, sh };
-}
-// Map a raw normalized video-space point (0..1) through the current crop,
-// producing the normalized position within what's actually shown on screen.
-function toCropped(nx, ny) {
-  return { x: (nx - camCrop.sx) / camCrop.sw, y: (ny - camCrop.sy) / camCrop.sh };
-}
-
-// Library of named keyframe poses. Each returns a full joint map.
-// Coordinates are normalized (0-1). cx offset lets a pose lean/shift.
 function basePose(over) {
   const p = {
     nose:           { x: CXX,        y: 0.28 },
@@ -614,7 +120,6 @@ function basePose(over) {
   if (over) for (const k in over) p[k] = over[k];
   return p;
 }
-
 const POSES = {
   neutral: () => basePose(),
 
@@ -696,831 +201,6 @@ const POSES = {
     left_wrist:  { x: CXX-0.14, y: SHY-0.20 },
   }),
 };
-
-// Interpolate between two joint maps
-function lerpPose(a, b, tt) {
-  const out = {};
-  for (const k of GUIDE_JOINTS) {
-    const ja = a[k], jb = b[k];
-    if (ja && jb) {
-      out[k] = { x: ja.x + (jb.x - ja.x) * tt, y: ja.y + (jb.y - ja.y) * tt };
-    } else if (jb) {
-      out[k] = { x: jb.x, y: jb.y };
-    } else if (ja) {
-      out[k] = { x: ja.x, y: ja.y };
-    }
-  }
-  return out;
-}
-
-// Build a pose function from a sequence of pose-name keyframes.
-// The sequence plays through over the dance, looping if time remains.
-function makeSequenceFn(sequence, stepDuration) {
-  const frames = sequence.map(name => POSES[name]());
-  const total = frames.length * stepDuration;
-  return function (t) {
-    const tt = t % total;
-    const idx = Math.floor(tt / stepDuration);
-    const frac = (tt % stepDuration) / stepDuration;
-    // ease in-out for smoother, more dance-like transitions
-    const eased = frac < 0.5 ? 2*frac*frac : 1 - Math.pow(-2*frac+2, 2)/2;
-    const a = frames[idx % frames.length];
-    const b = frames[(idx + 1) % frames.length];
-    return lerpPose(a, b, eased);
-  };
-}
-
-function setStatus(text, cls) {
-  statusEl.textContent = text;
-  statusEl.className = cls;
-}
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  byeCanvas.width = window.innerWidth;
-  byeCanvas.height = window.innerHeight;
-  satisfyCanvas.width = window.innerWidth;
-  satisfyCanvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resizeCanvas);
-
-// Tap/click anywhere to start a new dance session when idle
-canvas.addEventListener('click', () => {
-  if (running && !sessionActive && !returningHome) startSession(performance.now() / 1000);
-});
-
-async function setupCamera() {
-  // Works across phone, tablet, laptop/PC webcams, and a Raspberry Pi + USB
-  // webcam (exhibition rig). facingMode is only meaningful on phones/tablets;
-  // on a plain webcam it's ignored, not rejected. If a device is picky about
-  // the constraint object entirely, fall back to a bare video:true request.
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: false
-    });
-  } catch (e) {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-  }
-  video.srcObject = stream;
-  return new Promise((resolve, reject) => {
-    video.onloadedmetadata = async () => {
-      try {
-        await video.play();
-        resolve(video);
-      } catch (e) {
-        reject(e);
-      }
-    };
-  });
-}
-
-async function loadModel() {
-  await tf.setBackend('webgl');
-  await tf.ready();
-  detector = await poseDetection.createDetector(
-    poseDetection.SupportedModels.MoveNet,
-    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-  );
-}
-
-// Robotic humanoid render for the AI guide — segmented metallic limbs,
-// circular "servo" joints, a chest plate, and a visor head. Reads as a
-// robot dance partner. Still fully 2D so it stays Raspberry-Pi feasible.
-// offsetX shifts the figure sideways; scale shrinks it.
-function drawGuideSkeleton(joints, w, h, t, offsetX = 0, scale = 1) {
-  const cx = 0.5;
-  const px = (nx) => (offsetX + cx + (nx - cx) * scale) * w;
-  const py = (ny) => (0.5 + (ny - 0.5) * scale) * h;
-
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  const metal = 'rgba(150,170,185,0.9)';
-  const metalDark = 'rgba(70,90,105,0.9)';
-  const glow = 'rgba(94,226,255,0.95)';
-
-  // chest plate (torso as a filled metallic panel)
-  const ls = joints.left_shoulder, rs = joints.right_shoulder;
-  const lh = joints.left_hip, rh = joints.right_hip;
-  if (ls && rs && lh && rh) {
-    const grad = ctx.createLinearGradient(px(ls.x), py(ls.y), px(rh.x), py(rh.y));
-    grad.addColorStop(0, 'rgba(120,140,155,0.85)');
-    grad.addColorStop(1, 'rgba(60,78,92,0.85)');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = metal;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(px(ls.x), py(ls.y));
-    ctx.lineTo(px(rs.x), py(rs.y));
-    ctx.lineTo(px(rh.x), py(rh.y));
-    ctx.lineTo(px(lh.x), py(lh.y));
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    // glowing core light on chest
-    const mx = (px(ls.x)+px(rs.x)+px(lh.x)+px(rh.x))/4;
-    const my = (py(ls.y)+py(rs.y)+py(lh.y)+py(rh.y))/4;
-    ctx.shadowColor = glow; ctx.shadowBlur = 14;
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(mx, my, 6*scale, 0, 2*Math.PI); ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // limb segments as tapered metallic tubes
-  ctx.strokeStyle = metalDark;
-  ctx.lineWidth = 16 * scale;
-  SKELETON_PAIRS.forEach(([a, b]) => {
-    if (a === 'left_shoulder' && b === 'right_shoulder') return;
-    if (a === 'left_hip' && b === 'right_hip') return;
-    const ja = joints[a], jb = joints[b];
-    if (!ja || !jb) return;
-    ctx.beginPath();
-    ctx.moveTo(px(ja.x), py(ja.y));
-    ctx.lineTo(px(jb.x), py(jb.y));
-    ctx.stroke();
-  });
-  // lighter highlight down each limb
-  ctx.strokeStyle = metal;
-  ctx.lineWidth = 6 * scale;
-  SKELETON_PAIRS.forEach(([a, b]) => {
-    if (a === 'left_shoulder' && b === 'right_shoulder') return;
-    if (a === 'left_hip' && b === 'right_hip') return;
-    const ja = joints[a], jb = joints[b];
-    if (!ja || !jb) return;
-    ctx.beginPath();
-    ctx.moveTo(px(ja.x), py(ja.y));
-    ctx.lineTo(px(jb.x), py(jb.y));
-    ctx.stroke();
-  });
-
-  // servo joints (circles) at every joint
-  const jointNames = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
-    'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
-  jointNames.forEach(name => {
-    const j = joints[name];
-    if (!j) return;
-    const x = px(j.x), y = py(j.y);
-    ctx.fillStyle = metal;
-    ctx.beginPath(); ctx.arc(x, y, 7*scale, 0, 2*Math.PI); ctx.fill();
-    ctx.fillStyle = glow;
-    ctx.shadowColor = glow; ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.arc(x, y, 3*scale, 0, 2*Math.PI); ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  // robotic visor head
-  if (joints.nose) {
-    const hx = px(joints.nose.x), hy = py(joints.nose.y);
-    const r = 24 * scale;
-    // helmet shell
-    ctx.fillStyle = 'rgba(40,48,56,0.95)';
-    ctx.strokeStyle = metal;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(hx, hy, r*0.85, r, 0, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
-    // glowing visor band with two eyes
-    ctx.shadowColor = glow; ctx.shadowBlur = 10;
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(hx - r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
-    ctx.beginPath(); ctx.arc(hx + r*0.32, hy - r*0.1, r*0.16, 0, 2*Math.PI); ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  ctx.restore();
-}
-
-// Offscreen canvas used to sample + filter the face region pixels.
-const offCanvas = document.createElement('canvas');
-const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-
-// FULL-SCREEN filter for thermal / negative: the entire camera view
-// (whole body + background) is remapped, which also hides the face
-// everywhere on screen. Processed at a downscaled resolution for speed,
-// then scaled up — keeps it light enough for the Raspberry Pi.
-const FILTER_DS = 256; // downscale width for full-screen processing
-function drawFullScreenFilter(w, h, mode) {
-  const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
-  if (!vw || !vh) return;
-  const sw = FILTER_DS, sh = Math.max(2, Math.round(FILTER_DS * vh / vw));
-  offCanvas.width = sw; offCanvas.height = sh;
-  offCtx.drawImage(video, 0, 0, sw, sh);
-  let img;
-  try { img = offCtx.getImageData(0, 0, sw, sh); }
-  catch (e) { return; }
-  const d = img.data;
-  if (mode === 'thermal') {
-    for (let i = 0; i < d.length; i += 4) {
-      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-      const c = thermalColor(L);
-      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
-    }
-  } else { // negative
-    for (let i = 0; i < d.length; i += 4) {
-      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
-    }
-  }
-  offCtx.putImageData(img, 0, 0);
-  ctx.save();
-  ctx.imageSmoothingEnabled = true;
-  ctx.translate(w, 0); ctx.scale(-1, 1); // mirror to match user
-  ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h);
-  ctx.restore();
-}
-
-// Thermal color ramp: map brightness (0-255) to a cold->hot color.
-function thermalColor(L) {
-  const t = L / 255;
-  // stops: deep blue -> blue -> red -> yellow -> white
-  const stops = [
-    [0.0,  10, 0,  60],
-    [0.25, 20, 0, 230],
-    [0.5, 230, 0,  40],
-    [0.75,255,200, 0],
-    [1.0, 255,255,255],
-  ];
-  for (let i = 0; i < stops.length - 1; i++) {
-    const a = stops[i], b = stops[i+1];
-    if (t >= a[0] && t <= b[0]) {
-      const f = (t - a[0]) / (b[0] - a[0]);
-      return [a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, a[3]+(b[3]-a[3])*f];
-    }
-  }
-  return [255,255,255];
-}
-
-// PRIVACY MODE: the participant's face region is sampled and run through a
-// camera-style filter (thermal / negative / pixelate) so the actual face
-// is never shown — only an abstracted, unrecognizable version. Processing
-// is local and nothing is stored. Small region only, so it stays light.
-function drawPrivacyFilter(joints, w, h, mode) {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return;
-
-  const nose = joints.nose;
-  if (!nose) return;
-  const le = joints.left_eye, re = joints.right_eye;
-  const lear = joints.left_ear, rear = joints.right_ear;
-
-  // face half-width (normalized) from eyes, else ears, else default
-  let halfW;
-  if (le && re) halfW = Math.hypot(le.x-re.x, le.y-re.y) * 1.7;
-  else if (lear && rear) halfW = Math.hypot(lear.x-rear.x, lear.y-rear.y) * 0.95;
-  else halfW = 0.12;
-  halfW = Math.max(0.06, Math.min(0.28, halfW));
-
-  const cx = nose.x, cy = nose.y;
-  // normalized face box (a bit taller than wide)
-  let nx0 = cx - halfW, ny0 = cy - halfW*1.15;
-  let nw = halfW*2, nh = halfW*2.35;
-  // clamp
-  nx0 = Math.max(0, nx0); ny0 = Math.max(0, ny0);
-  nw = Math.min(1 - nx0, nw); nh = Math.min(1 - ny0, nh);
-
-  const bx = Math.floor(nx0*vw), by = Math.floor(ny0*vh);
-  const bw = Math.max(2, Math.floor(nw*vw)), bh = Math.max(2, Math.floor(nh*vh));
-
-  offCanvas.width = bw; offCanvas.height = bh;
-  offCtx.drawImage(video, bx, by, bw, bh, 0, 0, bw, bh);
-
-  let img;
-  try { img = offCtx.getImageData(0, 0, bw, bh); }
-  catch (e) { return; }
-  const d = img.data;
-
-  if (mode === 'thermal') {
-    for (let i = 0; i < d.length; i += 4) {
-      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-      const c = thermalColor(L);
-      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2];
-    }
-    offCtx.putImageData(img, 0, 0);
-  } else if (mode === 'negative') {
-    for (let i = 0; i < d.length; i += 4) {
-      d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2];
-    }
-    offCtx.putImageData(img, 0, 0);
-  } else if (mode === 'pixel') {
-    // mosaic: average blocks
-    const block = Math.max(4, Math.floor(bw / 12));
-    for (let yy = 0; yy < bh; yy += block) {
-      for (let xx = 0; xx < bw; xx += block) {
-        let r=0,g=0,b=0,n=0;
-        for (let j=0;j<block;j++){
-          for (let k=0;k<block;k++){
-            const px2 = xx+k, py2 = yy+j;
-            if (px2>=bw||py2>=bh) continue;
-            const idx=(py2*bw+px2)*4;
-            r+=d[idx]; g+=d[idx+1]; b+=d[idx+2]; n++;
-          }
-        }
-        r/=n; g/=n; b/=n;
-        for (let j=0;j<block;j++){
-          for (let k=0;k<block;k++){
-            const px2 = xx+k, py2 = yy+j;
-            if (px2>=bw||py2>=bh) continue;
-            const idx=(py2*bw+px2)*4;
-            d[idx]=r; d[idx+1]=g; d[idx+2]=b;
-          }
-        }
-      }
-    }
-    offCtx.putImageData(img, 0, 0);
-  }
-
-  // draw filtered patch onto overlay, mirrored to match the displayed video,
-  // clipped to a soft ellipse so it reads as a face, not a rectangle
-  const sx0 = (1 - (nx0 + nw)) * w;
-  const sy0 = ny0 * h;
-  const sw = nw * w, sh = nh * h;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
-  ctx.clip();
-  // mirror horizontally
-  ctx.translate(sx0 + sw, sy0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(offCanvas, 0, 0, bw, bh, 0, 0, sw, sh);
-  ctx.restore();
-
-  // subtle tech frame around the face box
-  ctx.save();
-  ctx.strokeStyle = mode === 'thermal' ? 'rgba(255,180,120,0.6)'
-                   : mode === 'negative' ? 'rgba(180,255,220,0.5)'
-                   : 'rgba(200,200,220,0.5)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(sx0 + sw/2, sy0 + sh/2, sw/2, sh/2, 0, 0, 2*Math.PI);
-  ctx.stroke();
-  ctx.restore();
-}
-
-// rough face scale from ear distance or eye distance, for fallback sizing
-function faceScaleRef(joints, h) {
-  const le = joints.left_ear, re = joints.right_ear;
-  if (le && re) return Math.hypot((le.x-re.x), (le.y-re.y)) * 900;
-  return h * 0.14;
-}
-
-// ---- Abstract movement-line field (Laban / Kandinsky inspired) ----
-// Instead of a literal skeleton, the participant's body drives 100+
-// self-generating lines, arcs and curves anchored to their joints. As
-// they move, the lines form gestural shapes echoing the reference
-// dance-analysis drawings. Face is never drawn here, so privacy holds.
-const BODY_JOINTS = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
-  'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee',
-  'left_ankle','right_ankle'];
-
-function makeLineAgent() {
-  const types = ['line','zig','arc','curve'];
-  // green motion lines in a few shades
-  const tones = [
-    'rgba(70,235,130,','rgba(70,235,130,','rgba(120,255,170,',
-    'rgba(35,180,95,','rgba(150,255,190,',
-  ];
-  return {
-    a: BODY_JOINTS[(Math.random()*BODY_JOINTS.length)|0],
-    b: BODY_JOINTS[(Math.random()*BODY_JOINTS.length)|0],
-    type: types[(Math.random()*types.length)|0],
-    angle: Math.random()*Math.PI*2,
-    len: 0.12 + Math.random()*0.4,
-    rad: 0.05 + Math.random()*0.3,
-    curv: (Math.random()*2-1),
-    bend: (Math.random()*2-1),
-    phase: Math.random()*Math.PI*2,
-    speed: 0.2 + Math.random()*1.1,
-    tone: tones[(Math.random()*tones.length)|0],
-    alpha: 0.25 + Math.random()*0.45,
-    width: 0.6 + Math.random()*1.6,
-  };
-}
-const LINE_AGENTS = Array.from({ length: 110 }, makeLineAgent);
-
-function drawBodyLines(joints, w, h, t) {
-  const px = (nx) => (1 - nx) * w;
-  const py = (ny) => ny * h;
-  // centroid fallback for any joint the model can't currently see
-  let cxs=0, cys=0, n=0;
-  BODY_JOINTS.forEach(k => { if (joints[k]) { cxs+=px(joints[k].x); cys+=py(joints[k].y); n++; } });
-  if (n === 0) return;
-  const cX = cxs/n, cY = cys/n;
-  const pos = (k) => { const j = joints[k]; return j ? { x:px(j.x), y:py(j.y) } : { x:cX, y:cY }; };
-
-  ctx.save();
-  ctx.lineCap = 'round';
-
-  // occasionally respawn an agent -> continuous "self-generating" feel
-  if (Math.random() < 0.06) LINE_AGENTS[(Math.random()*LINE_AGENTS.length)|0] = makeLineAgent();
-
-  for (const ag of LINE_AGENTS) {
-    const A = pos(ag.a), B = pos(ag.b);
-    const ph = t*ag.speed + ag.phase;
-    const al = (ag.alpha*(0.6 + 0.4*Math.sin(ph*0.8+1))).toFixed(3);
-    ctx.strokeStyle = ag.tone + al + ')';
-    ctx.lineWidth = ag.width;
-    ctx.beginPath();
-
-    if (ag.type === 'line') {
-      const ang = ag.angle + Math.sin(ph)*0.5;
-      const L = ag.len*h*(0.7 + 0.3*Math.sin(ph*0.7));
-      ctx.moveTo(A.x, A.y);
-      ctx.lineTo(A.x + Math.cos(ang)*L, A.y + Math.sin(ang)*L);
-    } else if (ag.type === 'zig') {
-      const ang = ag.angle + Math.sin(ph*0.6)*0.4;
-      const L = ag.len*h*0.6;
-      const bx = A.x + Math.cos(ang)*L, by = A.y + Math.sin(ang)*L;
-      const ang2 = ang + (ag.bend>0?1:-1)*(0.8 + 0.5*Math.sin(ph));
-      ctx.moveTo(A.x, A.y);
-      ctx.lineTo(bx, by);
-      ctx.lineTo(bx + Math.cos(ang2)*L*0.8, by + Math.sin(ang2)*L*0.8);
-    } else if (ag.type === 'arc') {
-      const c = { x:(A.x+B.x)/2, y:(A.y+B.y)/2 };
-      const r = ag.rad*h*(0.8 + 0.2*Math.sin(ph));
-      const s = ag.angle + ph*0.3;
-      const e = s + (1.4 + Math.sin(ph)*0.8);
-      ctx.arc(c.x, c.y, r, s, e);
-    } else { // curve
-      const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
-      const dx=B.x-A.x, dy=B.y-A.y;
-      const len=Math.hypot(dx,dy)||1;
-      const nxp=-dy/len, nyp=dx/len;
-      const off=ag.curv*h*0.18*(0.6 + 0.4*Math.sin(ph));
-      ctx.moveTo(A.x, A.y);
-      ctx.quadraticCurveTo(mx+nxp*off, my+nyp*off, B.x, B.y);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-// (Target is now a single gestural line — see LINE_PRESETS / drawTargetShapeRect below.)
-
-// ---- TARGET gesture line ----
-// A single continuous line (mix of flowing curves and sharp angles, in the
-// Laban / Kandinsky style) that the participant matches with their body.
-// Holds ~1s then quickly morphs to the next shape. Each shape is a list of
-// points; some segments render as smooth curves, giving the mixed feel.
-// Each preset is ONE continuous line that traces a readable dance pose,
-// flowing head -> arm/hand -> body -> leg, so the participant can see it
-// as a pose to copy (like the reference gesture-line drawings).
-const GESTURE_PRESETS = [
-  // reach-up: head, arm up, down through body, legs apart
-  [[0.50,0.12],[0.60,0.22],[0.66,0.36],[0.52,0.40],[0.50,0.60],[0.40,0.86]],
-  // side bend: head tilts, arm sweeps, body curves, leg out
-  [[0.44,0.14],[0.34,0.24],[0.46,0.38],[0.56,0.52],[0.50,0.68],[0.62,0.88]],
-  // lunge: head, arm forward, long diagonal body to back leg
-  [[0.42,0.16],[0.56,0.26],[0.50,0.42],[0.44,0.56],[0.60,0.70],[0.70,0.88]],
-  // arch back: head back, body curves, legs under
-  [[0.52,0.16],[0.44,0.28],[0.54,0.42],[0.48,0.58],[0.52,0.74],[0.50,0.90]],
-  // leap: head, one arm up, body diagonal, legs split
-  [[0.40,0.14],[0.54,0.22],[0.48,0.40],[0.58,0.54],[0.38,0.72],[0.64,0.86]],
-];
-const clamp01 = (v) => Math.max(0.05, Math.min(0.95, v));
-function randomGesture() {
-  const base = GESTURE_PRESETS[(Math.random()*GESTURE_PRESETS.length)|0];
-  return base.map(p => ({ x: clamp01(p[0] + (Math.random()*2-1)*0.03),
-                          y: clamp01(p[1] + (Math.random()*2-1)*0.03) }));
-}
-function lerpPts(a, b, f) {
-  return a.map((p, i) => ({ x: p.x + (b[i].x-p.x)*f, y: p.y + (b[i].y-p.y)*f }));
-}
-
-// Clean line-figure target: cycles through easy full-body poses so the
-// participant can clearly read head/arms/body/legs and copy the pose.
-const EASY_POSES = ['armsUp','armsOutT','leftUp','rightUp','handsHips','oneKneeUp','neutral'];
-let poseCur = null, poseNext = null, pose0 = null;
-const P_HOLD = 1.2, P_MORPH = 0.8;
-function randomEasyPose() { return POSES[ EASY_POSES[(Math.random()*EASY_POSES.length)|0] ](); }
-// Green tracking line: a single smooth line through 3 body points —
-// top = right hand (wrist), middle = hip, bottom = left leg (ankle).
-// This mirrors the concept that the line's top/middle/bottom map to
-// specific body parts, so the participant matches the red pose line.
-function drawTrackingLine(joints, rect, opts) {
-  const px = (nx) => rect.x + (1 - nx) * rect.w; // mirrored
-  const py = (ny) => rect.y + ny * rect.h;
-
-  const rw = joints.right_wrist;                 // top = right hand
-  const lh = joints.left_hip, rh = joints.right_hip;
-  const hip = (lh && rh) ? { x:(lh.x+rh.x)/2, y:(lh.y+rh.y)/2 } : (lh || rh); // middle = hip
-  const la = joints.left_ankle;                  // bottom = left leg
-
-  const pts = [];
-  if (rw)  pts.push({ x: px(rw.x),  y: py(rw.y)  });
-  if (hip) pts.push({ x: px(hip.x), y: py(hip.y) });
-  if (la)  pts.push({ x: px(la.x),  y: py(la.y)  });
-  if (pts.length < 2) return;
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-  const build = () => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    if (pts.length === 3) {
-      // smooth curve: quadratic through the middle (hip) point
-      ctx.quadraticCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
-    } else {
-      ctx.lineTo(pts[1].x, pts[1].y);
-    }
-  };
-  build(); ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
-  build(); ctx.lineWidth = 6;  ctx.strokeStyle = 'rgba(70,235,130,0.95)'; ctx.stroke();
-
-  // end labels so the mapping is clear
-  const dot = (p, label, col) => {
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = '600 11px -apple-system, sans-serif';
-    ctx.fillText(label, p.x + 10, p.y + 4);
-  };
-  if (rw)  dot(pts[0], 'R hand', 'rgba(120,255,170,0.95)');
-  if (la)  dot(pts[pts.length-1], 'L leg', 'rgba(120,255,170,0.95)');
-  ctx.restore();
-}
-
-// ---- Self-drawing dance gesture line ----
-// A single flowing curved line that the "AI" draws stroke by stroke (ink
-// flowing on), completes, holds briefly, then clears and draws the next —
-// like the reference ribbon-curve dance drawings. Not morphing: drawing.
-const DANCE_CURVES = [
-  // flowing S: hand high, spine curve, leg extends low
-  [[0.58,0.14],[0.50,0.30],[0.56,0.46],[0.44,0.60],[0.50,0.78],[0.40,0.90]],
-  // question-mark sweep: hand curls over, body drops straight
-  [[0.44,0.20],[0.58,0.16],[0.62,0.30],[0.50,0.40],[0.50,0.62],[0.50,0.88]],
-  // deep bend: hand forward-low, arched back, leg back
-  [[0.34,0.40],[0.48,0.30],[0.58,0.40],[0.52,0.58],[0.60,0.74],[0.46,0.90]],
-  // tall reach: hand at very top, long gentle spine to low leg
-  [[0.52,0.10],[0.50,0.28],[0.54,0.46],[0.48,0.64],[0.52,0.80],[0.44,0.92]],
-  // side lean: hand out high, waist curve, leg planted
-  [[0.62,0.18],[0.50,0.30],[0.44,0.46],[0.56,0.58],[0.48,0.74],[0.58,0.90]],
-  // leap sweep: hand back, big diagonal through hip to far leg
-  [[0.38,0.16],[0.50,0.28],[0.48,0.46],[0.58,0.58],[0.52,0.74],[0.64,0.90]],
-];
-const clampC = (v) => Math.max(0.06, Math.min(0.94, v));
-function randomCurve() {
-  const base = DANCE_CURVES[(Math.random()*DANCE_CURVES.length)|0];
-  return base.map(p => [ clampC(p[0] + (Math.random()*2-1)*0.025),
-                         clampC(p[1] + (Math.random()*2-1)*0.025) ]);
-}
-
-let curCurve = randomCurve();
-let curveT0 = null;
-const DRAW_TIME = 1.6;  // seconds to draw the line
-const HOLD_TIME = 3.0;  // hold the completed shape for 3s
-const FADE_TIME = 0.5;  // fade out before next
-
-// Catmull-Rom -> bezier smoothing, drawing only up to `progress` (0..1)
-function drawCurveProgressive(curve, rect, progress, alpha) {
-  const pts = curve.map(p => ({ x: rect.x + p[0]*rect.w, y: rect.y + p[1]*rect.h }));
-  const N = pts.length;
-  const totalSegs = N - 1;
-  const drawSegs = progress * totalSegs;
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-  const build = () => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 0; i < totalSegs; i++) {
-      const segFrac = Math.min(1, Math.max(0, drawSegs - i));
-      if (segFrac <= 0) break;
-      const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
-      const c1x = p1.x + (p2.x - p0.x)/6, c1y = p1.y + (p2.y - p0.y)/6;
-      const c2x = p2.x - (p3.x - p1.x)/6, c2y = p2.y - (p3.y - p1.y)/6;
-      if (segFrac >= 1) {
-        ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
-      } else {
-        // partial segment: subdivide the bezier up to segFrac
-        const t2 = segFrac;
-        const x = cubicAt(p1.x, c1x, c2x, p2.x, t2);
-        const y = cubicAt(p1.y, c1y, c2y, p2.y, t2);
-        ctx.bezierCurveTo(
-          p1.x + (c1x-p1.x)*t2, p1.y + (c1y-p1.y)*t2,
-          c1x + (c2x-c1x)*t2,  c1y + (c2y-c1y)*t2,
-          x, y);
-      }
-    }
-  };
-
-  build(); ctx.lineWidth = 16; ctx.strokeStyle = `rgba(0,0,0,${0.35*alpha})`; ctx.stroke();
-  build(); ctx.lineWidth = 10; ctx.strokeStyle = `rgba(255,255,255,${0.85*alpha})`; ctx.stroke();
-  build(); ctx.lineWidth = 5;  ctx.strokeStyle = `rgba(226,34,54,${0.95*alpha})`; ctx.stroke();
-
-  // glowing "pen tip" at the drawing head
-  if (progress < 1) {
-    const i = Math.min(totalSegs-1, Math.floor(drawSegs));
-    const segFrac = Math.min(1, Math.max(0, drawSegs - i));
-    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1] || p1, p3 = pts[i+2] || p2;
-    const c1x = p1.x + (p2.x - p0.x)/6, c1y = p1.y + (p2.y - p0.y)/6;
-    const c2x = p2.x - (p3.x - p1.x)/6, c2y = p2.y - (p3.y - p1.y)/6;
-    const hx = cubicAt(p1.x, c1x, c2x, p2.x, segFrac);
-    const hy = cubicAt(p1.y, c1y, c2y, p2.y, segFrac);
-    ctx.shadowColor = 'rgba(255,120,140,0.95)'; ctx.shadowBlur = 16;
-    ctx.fillStyle = 'rgba(255,220,225,0.98)';
-    ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
-}
-function cubicAt(a, b, c, d, t) {
-  const mt = 1 - t;
-  return mt*mt*mt*a + 3*mt*mt*t*b + 3*mt*t*t*c + t*t*t*d;
-}
-
-function labelCurveEnds(curve, rect, alpha) {
-  const top = curve[0], bot = curve[curve.length-1];
-  const tx = rect.x + top[0]*rect.w, ty = rect.y + top[1]*rect.h;
-  const bx = rect.x + bot[0]*rect.w, by = rect.y + bot[1]*rect.h;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = 'rgba(255,180,190,0.95)';
-  ctx.beginPath(); ctx.arc(tx, ty, 7, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.font = '600 11px -apple-system, sans-serif';
-  ctx.fillText('R hand', tx + 10, ty + 4);
-  ctx.fillText('L leg',  bx + 10, by + 4);
-  ctx.restore();
-}
-
-function drawDanceCurve(rect, t) {
-  if (curveT0 === null) curveT0 = t;
-  const e = t - curveT0;
-  const cycle = DRAW_TIME + HOLD_TIME + FADE_TIME;
-  if (e < DRAW_TIME) {
-    let p = e / DRAW_TIME;
-    p = p < 0.5 ? 2*p*p : 1 - Math.pow(-2*p+2, 2)/2; // ease the drawing speed
-    drawCurveProgressive(curCurve, rect, p, 1);
-  } else if (e < DRAW_TIME + HOLD_TIME) {
-    drawCurveProgressive(curCurve, rect, 1, 1);
-    labelCurveEnds(curCurve, rect, 1);
-  } else if (e < cycle) {
-    const fp = (e - DRAW_TIME - HOLD_TIME) / FADE_TIME;
-    drawCurveProgressive(curCurve, rect, 1, 1 - fp);
-    labelCurveEnds(curCurve, rect, 1 - fp);
-  } else {
-    curCurve = randomCurve();
-    curveT0 = t;
-  }
-}
-
-function currentTargetPose(t) {
-  if (pose0 === null) { poseCur = randomEasyPose(); poseNext = randomEasyPose(); pose0 = t; }
-  const e = t - pose0;
-  if (e < P_HOLD) return poseCur;
-  if (e < P_HOLD + P_MORPH) {
-    let f = (e - P_HOLD) / P_MORPH;
-    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
-    return lerpPose(poseCur, poseNext, f);
-  }
-  poseCur = poseNext; poseNext = randomEasyPose(); pose0 = t;
-  return poseCur;
-}
-
-// Continuous dance: flow through a choreography sequence without long holds,
-// plus a live rhythmic overlay (sway, bounce, hand flourish) so the line
-// keeps moving like a real dancer instead of freezing between poses.
-const CHOREO = ['neutral','armsUp','rightUp','armsOutT','leftUp','handsHips',
-  'oneKneeUp','armsUp','leanLeft','clapCenter','leanRight','prayer'];
-const STEP = 0.7; // seconds per step (fast)
-function currentDancePose(t) {
-  const total = CHOREO.length * STEP;
-  const tt = t % total;
-  const idx = Math.floor(tt / STEP);
-  let f = (tt % STEP) / STEP;
-  f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2; // ease each step
-  const a = POSES[CHOREO[idx % CHOREO.length]]();
-  const b = POSES[CHOREO[(idx+1) % CHOREO.length]]();
-  const base = lerpPose(a, b, f);
-
-  // live rhythmic overlay
-  const sway = Math.sin(t*2.2) * 0.014;   // weight shift side to side
-  const bob  = Math.sin(t*4.4) * 0.010;   // bounce (double-time beat)
-  const fl   = Math.sin(t*3.1) * 0.022;   // hand flourish
-  const out = {};
-  for (const k in base) out[k] = { x: base[k].x + sway, y: base[k].y + bob };
-  if (out.left_wrist)  { out.left_wrist.x  -= fl; out.left_wrist.y  += fl*0.5; }
-  if (out.right_wrist) { out.right_wrist.x += fl; out.right_wrist.y -= fl*0.5; }
-  if (out.left_elbow)  out.left_elbow.y  += Math.sin(t*3.1+1)*0.008;
-  if (out.right_elbow) out.right_elbow.y += Math.sin(t*3.1+2)*0.008;
-  return out;
-}
-
-let tgtCur = null, tgtNext = null, tgt0 = null;
-const HOLD = 1.0, MORPH = 0.9;
-
-function currentGesture(t) {
-  if (tgt0 === null) { tgtCur = randomGesture(); tgtNext = randomGesture(); tgt0 = t; }
-  const e = t - tgt0;
-  if (e < HOLD) return tgtCur;
-  if (e < HOLD + MORPH) {
-    let f = (e - HOLD) / MORPH;
-    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
-    return lerpPts(tgtCur, tgtNext, f);
-  }
-  tgtCur = tgtNext; tgtNext = randomGesture(); tgt0 = t;
-  return tgtCur;
-}
-
-// Draw a single gesture line into a rect. Alternating segments are drawn
-// as smooth curves vs. straight, mixing flowing and angular character.
-function drawGestureLine(pts, rect, t) {
-  const sp = pts.map((p, i) => ({
-    x: rect.x + (0.5 + (p.x - 0.5)*1.05 + Math.sin(t*0.7+i)*0.004) * rect.w,
-    y: rect.y + (0.5 + (p.y - 0.5)*1.15 + Math.cos(t*0.6+i)*0.004) * rect.h,
-  }));
-
-  const buildPath = () => {
-    ctx.beginPath();
-    ctx.moveTo(sp[0].x, sp[0].y);
-    for (let i = 0; i < sp.length - 1; i++) {
-      const p1 = sp[i], p2 = sp[i+1];
-      if (i % 2 === 0) {
-        // smooth curve segment
-        const p0 = sp[i-1] || p1, p3 = sp[i+2] || p2;
-        const c1x = p1.x + (p2.x-p0.x)/6, c1y = p1.y + (p2.y-p0.y)/6;
-        const c2x = p2.x - (p3.x-p1.x)/6, c2y = p2.y - (p3.y-p1.y)/6;
-        ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
-      } else {
-        // sharp straight segment
-        ctx.lineTo(p2.x, p2.y);
-      }
-    }
-  };
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  buildPath(); ctx.lineWidth = 18; ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.stroke();
-  buildPath(); ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.stroke();
-  buildPath(); ctx.lineWidth = 6;  ctx.strokeStyle = 'rgba(226,34,54,0.97)'; ctx.stroke();
-  ctx.restore();
-}
-
-// Draw a figure into a given rect {x,y,w,h}. sc scales width around center,
-// spreadY expands vertically, mirror flips horizontally.
-function drawFigureRect(joints, rect, opts) {
-  const sc = opts.sc || 1, spreadY = opts.spreadY || 1;
-  const px = (nx) => {
-    let x = 0.5 + (nx - 0.5) * sc;
-    x = opts.mirror ? (1 - x) : x;
-    return rect.x + x * rect.w;
-  };
-  const py = (ny) => rect.y + (0.5 + (ny - 0.5) * spreadY) * rect.h;
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-  const strokePairs = (width, color) => {
-    ctx.strokeStyle = color; ctx.lineWidth = width;
-    SKELETON_PAIRS.forEach(([a, b]) => {
-      const ja = joints[a], jb = joints[b];
-      if (!ja || !jb) return;
-      ctx.beginPath();
-      ctx.moveTo(px(ja.x), py(ja.y));
-      ctx.lineTo(px(jb.x), py(jb.y));
-      ctx.stroke();
-    });
-  };
-  if (opts.outline) strokePairs(opts.outline, 'rgba(0,0,0,0.42)');
-  if (opts.casing)  strokePairs(opts.casing,  'rgba(255,255,255,0.9)');
-  strokePairs(opts.core, opts.color);
-
-  if (joints.nose) {
-    const hx = px(joints.nose.x), hy = py(joints.nose.y), r = opts.headR || 18;
-    if (opts.outline) {
-      ctx.lineWidth = opts.outline*0.5; ctx.strokeStyle = 'rgba(0,0,0,0.42)';
-      ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2); ctx.stroke();
-    }
-    ctx.lineWidth = opts.core; ctx.strokeStyle = opts.color;
-    ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2); ctx.stroke();
-  }
-  ctx.fillStyle = opts.color;
-  ['left_wrist','right_wrist','left_ankle','right_ankle'].forEach(k => {
-    const j = joints[k]; if (!j) return;
-    ctx.beginPath(); ctx.arc(px(j.x), py(j.y), opts.core*0.95, 0, Math.PI*2); ctx.fill();
-  });
-  ctx.restore();
-}
-
-// ---- Animated dance moves ----
-// Each move is a function(t) -> pose (joint map), producing real motion
-// (vibration, arcs, spins, shifts) rather than a static shape. Only moves
-// a single standing stick figure can honestly express are included; prop/
-// group/floor moves from the full list are omitted (a stick figure can't
-// show swords, scarves, circles, seated work, etc. without faking it).
-function bp(over) { return basePose(over); }
-
-// Motion primitives (all take time t, return partial joint overrides).
-// Composed into 60 named moves below. Keeps distinct-looking motion while
-// honoring the real dance names from the list.
 const M = {
   // ---- upper body ----
   vibrate:(t,a=0.016,s=24)=>{const v=Math.sin(t*s)*a;return{left_shoulder:{x:CXX-0.09+v,y:SHY},right_shoulder:{x:CXX+0.09-v,y:SHY},left_elbow:{x:CXX-0.15+v,y:SHY+0.10},right_elbow:{x:CXX+0.15-v,y:SHY+0.10},left_wrist:{x:CXX-0.17+v,y:SHY+0.20},right_wrist:{x:CXX+0.17-v,y:SHY+0.20}};},
@@ -1541,6 +221,10 @@ const M = {
   overhead:(t)=>{const s=Math.sin(t*5)*0.12;return{left_wrist:{x:CXX-0.06+s,y:SHY-0.26},right_wrist:{x:CXX+0.06+s,y:SHY-0.26},left_elbow:{x:CXX-0.12,y:SHY-0.10},right_elbow:{x:CXX+0.12,y:SHY-0.10}};},
   still:(t)=>({nose:{x:CXX,y:0.28+Math.sin(t*1.2)*0.006}}),
   sway:(t,a=0.07)=>({__shift:Math.sin(t*2.2)*a}),
+  // revolve: turn the whole body to face left, then right, continuously
+  revolve:(t,s=1.0)=>({__revolve:Math.sin(t*s)}),
+  // revolve while doing something with the arms open
+  revolveOpen:(t,s=1.0)=>({__revolve:Math.sin(t*s),left_wrist:{x:CXX-0.26,y:SHY-0.02},right_wrist:{x:CXX+0.26,y:SHY-0.02},left_elbow:{x:CXX-0.16,y:SHY},right_elbow:{x:CXX+0.16,y:SHY}}),
 
   // ---- BOLD LEG MOTION ----
   // deep knee bend: whole body drops, knees splay
@@ -1582,29 +266,41 @@ const M = {
            left_hip:{x:CXX-0.08*sc,y:HIPY},right_hip:{x:CXX+0.08*sc,y:HIPY},
            right_knee:{x:CXX+0.09*sc,y:HIPY+0.16-lift},right_ankle:{x:CXX+0.10*sc,y:HIPY+0.32-lift*1.6}};},
 };
-
-// Build a pose from a primitive result, applying optional global __shift.
 function poseFrom(res){
   const shift = res.__shift || 0;
   const lift = res.__lift || 0;
+  const revolve = res.__revolve || 0; // -1 faces left, +1 faces right, 0 front
+  lastRevolveCapture = revolve;
   const over = {};
-  for(const k in res){ if(k==='__shift'||k==='__lift') continue; over[k]=res[k]; }
+  for(const k in res){ if(k==='__shift'||k==='__lift'||k==='__revolve') continue; over[k]=res[k]; }
   const p = basePose(over);
   if(shift || lift){ for(const k in p){ p[k]={x:p[k].x+shift,y:p[k].y-lift}; } }
+  if(revolve){
+    // Simulate a body turning in place: horizontally squash toward center
+    // (like foreshortening), and slide the whole figure slightly in the
+    // turn direction so it reads as revolving, not just shrinking.
+    const squash = 1 - 0.72 * Math.abs(revolve); // width factor at full turn
+    const slide = 0.05 * revolve;                // small drift in turn direction
+    for(const k in p){
+      p[k] = { x: CXX + (p[k].x - CXX) * squash + slide, y: p[k].y };
+    }
+  }
   return p;
 }
-
-// 60 named moves mapped to the closest honest stick-figure motion.
-// Rich dance moves drawn from the project's 4-country dataset
-// (India, Iran, Turkey/Azerbaijan, China). Each keeps its real movement
-// name, a condensed instruction, and its cultural meaning — mapped to the
-// closest honest stick-figure motion primitive.
-
-// ---- Keyframe choreography ----
-// Every move is now a SEQUENCE of distinct full-body poses. The figure
-// travels between them with an ease-in-out and a short hold on each pose —
-// the "hit the count, hold, next" rhythm of a dance teacher demonstrating.
-// Large pose-to-pose travel guarantees clearly visible motion in every move.
+function lerpPose(a, b, tt) {
+  const out = {};
+  for (const k of GUIDE_JOINTS) {
+    const ja = a[k], jb = b[k];
+    if (ja && jb) {
+      out[k] = { x: ja.x + (jb.x - ja.x) * tt, y: ja.y + (jb.y - ja.y) * tt };
+    } else if (jb) {
+      out[k] = { x: jb.x, y: jb.y };
+    } else if (ja) {
+      out[k] = { x: ja.x, y: ja.y };
+    }
+  }
+  return out;
+}
 const KP = {
   neutral:   {},
   armsUp:    {left_wrist:{x:CXX-0.24,y:0.16},right_wrist:{x:CXX+0.24,y:0.16},left_elbow:{x:CXX-0.17,y:0.29},right_elbow:{x:CXX+0.17,y:0.29},left_knee:{x:CXX-0.09,y:0.79},right_knee:{x:CXX+0.09,y:0.79},left_ankle:{x:CXX-0.10,y:0.94},right_ankle:{x:CXX+0.10,y:0.94}},
@@ -1648,11 +344,6 @@ const KP = {
 };
 const KFULL = {};
 for (const k in KP) KFULL[k] = poseFrom(KP[k]);
-
-// seq(poseNames, step): cycles through the named poses with a teaching
-// rhythm — travel smoothly to the pose (~0.6s real), then HOLD it for about
-// 1.5 seconds of real time so people can actually see, catch up, and copy
-// the step before the next one begins. `step` nudges the tempo per move.
 function seq(names, step = 1.7) {
   const TRAVEL_D = 1.4;                                    // dance-sec of smooth motion
   const HOLD_D = 3.5 * Math.min(1.25, Math.max(0.85, step / 1.7)); // dance-sec of pause
@@ -1669,7 +360,6 @@ function seq(names, step = 1.7) {
     return lerpPose(a, b, m);
   };
 }
-
 const DANCE_MOVES = [
   // ---------------- INDIA ----------------
   {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
@@ -1980,1071 +670,393 @@ const DANCE_MOVES = [
    text:'Light tiny steps, bending to pluck leaves, chasing butterflies.',
    meaning:'The vivid tea-harvest life of mountain villages.',
    fn:seq(['stepWideL','sweepLowR','stepWideR','sweepLowL'],1.3)},
+
+  // ---- REVOLVE demo moves (turning to face left / right in space) ----
+  {dance:'Sufi · Whirling', name:'Turning Body',
+   text:'Turn the whole body to face left, then right, arms open.',
+   meaning:'Revolving in space — facing every direction of the world.',
+   fn:t=>poseFrom(M.revolveOpen(t,1.1))},
+  {dance:'Folk · Revolve', name:'Facing the Circle',
+   text:'Rotate your torso to face side to side while stepping.',
+   meaning:'Turning to acknowledge the dancers around you.',
+   fn:t=>poseFrom({...M.revolve(t,0.9),...M.sideStep(t,2)})},
+
+  // ================= ETHIOPIA — Eskista =================
+  {dance:'Eskista · Ethiopia', name:'Rapid Shoulder Shimmy',
+   text:'Thrust both shoulders fast forward and back, lower body still.',
+   meaning:'Mimics a snake or spiritual trembling — deep emotion.',
+   fn:t=>poseFrom(M.vibrate(t,0.02,26))},
+  {dance:'Eskista · Ethiopia', name:'Chest Pop and Drop',
+   text:'Push the chest forward and up, then collapse it back down.',
+   meaning:'The heartbeat and vitality of the dancer.',
+   fn:t=>poseFrom(M.torsoArch(t*1.4))},
+  {dance:'Eskista · Ethiopia', name:'Stooping Shoulder Roll',
+   text:'Bend forward at the waist, rolling both shoulders in circles.',
+   meaning:'Deep respect and earthbound groundedness.',
+   fn:t=>poseFrom({...M.torsoArch(t*0.5),...M.vibrate(t,0.014,14)})},
+  {dance:'Eskista · Ethiopia', name:'Neck Glide',
+   text:'Slide the head sharply forward and back, torso still.',
+   meaning:'Upper-body agility and rhythmic mastery.',
+   fn:t=>poseFrom(M.headNod(t*1.3))},
+
+  // ================= RUSSIA — Cossack =================
+  {dance:'Cossack · Russia', name:'Prisiadka — Squat Kick',
+   text:'Deep squat, then kick one leg out fast, alternating legs.',
+   meaning:'Strength, stamina, and martial readiness.',
+   fn:t=>poseFrom({...M.kneeBend(t*0.5),...M.kick(t,4)})},
+  {dance:'Cossack · Russia', name:'Standing High Kick',
+   text:'Kick one straight leg high toward the chest, heavy landing.',
+   meaning:'Bravado and intimidating flexibility.',
+   fn:t=>poseFrom(M.kick(t,3))},
+  {dance:'Cossack · Russia', name:'Low Floor Spin',
+   text:'Crouch low and whip the body into a fast horizontal spin.',
+   meaning:'Evasion and agility of cavalry combat.',
+   fn:t=>poseFrom({...M.spin(t,5),...M.kneeBend(t*0.5)})},
+
+  // ================= BRAZIL — Samba =================
+  {dance:'Samba · Brazil', name:'Samba no pé — Basic Step',
+   text:'Fast bouncy steps foot to foot, knees bent, hips swaying.',
+   meaning:'Joy and Afro-Brazilian polyrhythmic heritage.',
+   fn:t=>poseFrom({...M.sideStep(t,3.5),...M.twist(t*1.2)})},
+  {dance:'Samba · Brazil', name:'Lateral Hip Swing',
+   text:'Feet wide, swing the hips fast in a figure-eight, upper body still.',
+   meaning:'Sensuality and the release of carnival.',
+   fn:t=>poseFrom({...M.twist(t*1.5),__shift:Math.sin(t*3)*0.05})},
+  {dance:'Samba · Brazil', name:'Fast Foot Taps',
+   text:'Hop on one leg, rapidly tap the other toe to side and front.',
+   meaning:'Fast footwork and improvisation to complex drums.',
+   fn:t=>poseFrom(M.kick(t,6))},
+  {dance:'Samba · Brazil', name:'Rapid Traveling Spin',
+   text:'Cross one foot over the other, spin fast while traveling.',
+   meaning:'The euphoric momentum of the carnival parade.',
+   fn:t=>poseFrom(M.spin(t,5))},
+
+  // ================= NEW ZEALAND — Haka =================
+  {dance:'Haka · New Zealand', name:'Takahia — Foot Stomp',
+   text:'Raise a leg and drive the foot hard into the ground, wide stance.',
+   meaning:'Power connected to the earth; asserting presence.',
+   fn:t=>poseFrom(M.stomp(t,2.5))},
+  {dance:'Haka · New Zealand', name:'Thigh and Chest Slap',
+   text:'Swing arms out and slap hands to chest and thighs on the beat.',
+   meaning:'The body as a percussion instrument to intimidate.',
+   fn:t=>poseFrom(M.clap(t,4))},
+  {dance:'Haka · New Zealand', name:'Wide Squat Stance',
+   text:'Drop low into a wide rigid squat, torso upright and tense.',
+   meaning:'The warrior posture — unwavering strength.',
+   fn:t=>poseFrom(M.kneeBend(t*0.6))},
+  {dance:'Haka · New Zealand', name:'Forearm Block and Strike',
+   text:'Punch one arm forward, pull the other back to the hip, switch sharply.',
+   meaning:'Combat blocks and strikes — martial prowess.',
+   fn:t=>poseFrom(M.pullChest(t*1.4))},
+
+  // ================= SPAIN — Flamenco =================
+  {dance:'Flamenco · Spain', name:'Zapateado — Heel Stomp',
+   text:'Strike the floor fast with heel and toe, torso upright and stiff.',
+   meaning:'The dancer as percussionist — sorrow or fierce joy.',
+   fn:t=>poseFrom(M.stomp(t,5))},
+  {dance:'Flamenco · Spain', name:'Braceo — Arm Sweeps',
+   text:'Raise curved arms overhead, sweep them slowly down and across.',
+   meaning:'Expressing the inner emotional state.',
+   fn:t=>poseFrom(M.armCircles(t*0.5))},
+  {dance:'Flamenco · Spain', name:'Torso Arch',
+   text:'Feet planted, arch the upper back, chest out, chin up — a slow pause.',
+   meaning:'Pride, defiance, and fierce dignity.',
+   fn:t=>poseFrom(M.torsoArch(t*0.5))},
+  {dance:'Flamenco · Spain', name:'Vuelta Quebrada — Broken Turn',
+   text:'Fast spin on one foot, arching the back, ending in a sharp freeze.',
+   meaning:'The sudden shifts of passion and tension.',
+   fn:t=>poseFrom({...M.spin(t,3),...M.torsoArch(t*0.5)})},
+
+  // ================= SOUTH AFRICA — Gumboot =================
+  {dance:'Gumboot · South Africa', name:'Side Boot Slap',
+   text:'Lift one bent leg to the side, slap the boot with the opposite hand.',
+   meaning:'The code miners used to talk underground in silence.',
+   fn:t=>poseFrom({...M.kneeLift(t,3),...M.clap(t,3)})},
+  {dance:'Gumboot · South Africa', name:'Synchronized Double Stomp',
+   text:'Stamp one foot down hard, then the other, for a resonant thud.',
+   meaning:'Solidarity, collective strength, shared labor.',
+   fn:t=>poseFrom(M.stomp(t,2.5))},
+  {dance:'Gumboot · South Africa', name:'Side Knee Slap',
+   text:'Lift one knee to the side and slap it, then the other.',
+   meaning:'Playful agility and defiance of harsh conditions.',
+   fn:t=>poseFrom({...M.kneeLift(t,3),...M.clap(t,3)})},
+  {dance:'Gumboot · South Africa', name:'The Salute Wipe',
+   text:'Slide one foot up the other ankle, then stomp it down fast.',
+   meaning:'Mocking the authority figures of the mining camps.',
+   fn:t=>poseFrom(M.stomp(t,3))},
+
+  // ================= IRELAND — Stepdance =================
+  {dance:'Stepdance · Ireland', name:'High Front Click',
+   text:'Arms pinned stiff to the sides, kick one straight leg high in front.',
+   meaning:'Discipline, control, and athletic prowess.',
+   fn:t=>poseFrom(M.kick(t,3.5))},
+  {dance:'Stepdance · Ireland', name:'Treble — Batter',
+   text:'Hop on one foot while the other rapidly strikes toe-heel-toe.',
+   meaning:'Rhythmic precision — the dancer as part of the music.',
+   fn:t=>poseFrom(M.stomp(t,6))},
+  {dance:'Stepdance · Ireland', name:'High Front Kick',
+   text:'Arms pinned to the sides, kick one straight leg high in front.',
+   meaning:'Height and control, the hallmark of the style.',
+   fn:t=>poseFrom(M.kick(t,3))},
+  {dance:'Stepdance · Ireland', name:'Cross-Key Step',
+   text:'Cross one foot over the other, weight side to side, fast small steps.',
+   meaning:'The rapid-fire footwork that is the style\'s hallmark.',
+   fn:t=>poseFrom(M.sideStep(t,4))},
+
+  // ================= GEORGIA — Kartuli =================
+  {dance:'Kartuli · Georgia', name:'Gasma — Toe Glide',
+   text:'Rigid upright, tiny rapid steps on the toes, floating smoothly.',
+   meaning:'Noble elegance and a frictionless glide.',
+   fn:t=>poseFrom(M.sway(t*1.5,0.04))},
+  {dance:'Kartuli · Georgia', name:'Asymmetrical Arm Hold',
+   text:'One arm out to the side, the other curled at the chest, torso rigid.',
+   meaning:'A protective shield, or demure grace.',
+   fn:t=>poseFrom({right_wrist:{x:CXX+0.27,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY},left_wrist:{x:CXX-0.02,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.06},nose:{x:CXX,y:0.28+Math.sin(t*1.2)*0.004}})},
+  {dance:'Kartuli · Georgia', name:'Fast Knee Spin',
+   text:'Drop onto both knees and spin fast, pivoting on the knees.',
+   meaning:'Explosive masculine strength and martial agility.',
+   fn:t=>poseFrom({...M.spin(t,5),...M.kneeBend(t*0.5)})},
+  {dance:'Kartuli · Georgia', name:'Rigid Toe Rise',
+   text:'Rise tall onto the toes, body rigid, alternating a lifted knee.',
+   meaning:'Extreme toughness and the mountain warrior spirit.',
+   fn:t=>poseFrom(M.kneeLift(t,2.5))},
 ];
 
-let moveIdx = 0, move0 = null;
+/* ============================================================
+   PART 2 — 2D → 3D bridge.
+   Maps the 2D engine's joints onto a 3D skeleton, adds depth,
+   and turns spin/revolve into real 3D rotation.
+   ============================================================ */
 
-// ---- Session system: 1-minute dance per participant ----
-let moveOrder = DANCE_MOVES.map((_, i) => i);
-let orderPos = 0;
-let sessionStart = null;
-const SESSION_LENGTH = 60;
-let sessionActive = false;
-
-// --- Presence / auto-flow state ---
-// lastSeen: last time a whole body was detected. Used to auto-return to the
-// start screen when nobody is there.
-let lastSeenAt = 0;
-let returningHome = false;      // a return-to-start transition is in progress
-const LEAVE_DANCE_GRACE = 5;    // dancer gone this long mid-dance -> go home
-const IDLE_EMPTY_GRACE = 12;    // nobody at idle this long -> go home
-let danceComplete = false;      // set when a session finishes naturally
-
-// Classify each move into a broad region from its dance label, so the
-// shuffle can balance across countries instead of letting the largest pool
-// (India) dominate every session.
-function moveRegion(dance) {
-  if (/Bandari|Zār|Zar|Rezif|Sword dance|Choub|Handkerchief dance · Iran|Rowing dance|Persian|Lur/.test(dance)) return 'Iran';
-  if (/Zeybek|Sema|Mevlevi|Azerbaijani|Türkiye|Turkish|Halay|Horon|Kaşık|Kochari|Lezginka|Caucasus|Anatolia|Black Sea/.test(dance)) return 'Turkey';
-  if (/China|Chinese|Yayue|Nuo|Dragon|Lion|Waist drum|Flower Drum|Court dance|Hu Xuan|Peacock|Dai people|Bonfire|Tea-picking|Errenzhuan|Loess/.test(dance)) return 'China';
-  return 'India';
+// 2D joints are normalized: x 0..1 (0.5 center), y 0..1 (0 top).
+// Map to 3D meters: center x at 0, invert y so up is +, scale.
+const SCALE_X = 3.2, SCALE_Y = 3.4, Y_OFF = 2.05;
+function to3D(j) {
+  return [ (j.x - 0.5) * SCALE_X, Y_OFF - j.y * SCALE_Y, 0 ];
 }
-const REGION_ORDER = ['India', 'Iran', 'Turkey', 'China'];
-let moveIndexByRegion = null;
-function buildRegionIndex() {
-  moveIndexByRegion = { India: [], Iran: [], Turkey: [], China: [] };
-  DANCE_MOVES.forEach((m, i) => { moveIndexByRegion[moveRegion(m.dance)].push(i); });
+// Build a 3D joint set from a 2D pose. mid-shoulder/hip become neck/chest/hip.
+function pose2Dto3D(p) {
+  const P = {};
+  const g = (k) => to3D(p[k]);
+  const mid = (a,b) => [ (a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2 ];
+  const ls=g('left_shoulder'), rs=g('right_shoulder'), lh=g('left_hip'), rh=g('right_hip');
+  P.head = g('nose');
+  P.neck = mid(ls,rs);
+  P.chest = [ P.neck[0], (P.neck[1]+ (mid(lh,rh)[1]))/2, 0 ];
+  P.hip = mid(lh,rh);
+  P.lShoulder=ls; P.rShoulder=rs;
+  P.lElbow=g('left_elbow'); P.rElbow=g('right_elbow');
+  P.lHand=g('left_wrist'); P.rHand=g('right_wrist');
+  P.lHipJ=lh; P.rHipJ=rh;
+  P.lKnee=g('left_knee'); P.rKnee=g('right_knee');
+  P.lFoot=g('left_ankle'); P.rFoot=g('right_ankle');
+  return P;
 }
 
-function shuffleArr(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+/* ============================================================
+   PART 3 — Three.js 3D figure + scene
+   ============================================================ */
+const three = document.getElementById('three');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050505);
+scene.fog = new THREE.Fog(0x050505, 7, 20);
+
+let camW = () => three.clientWidth, camH = () => three.clientHeight;
+const camera = new THREE.PerspectiveCamera(45, camW()/camH(), 0.1, 100);
+camera.position.set(0, 1.4, 6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(camW(), camH());
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+three.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.0, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 3.5; controls.maxDistance = 11;
+controls.enablePan = false;
+controls.update();
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(3,6,4); scene.add(key);
+const rim = new THREE.DirectionalLight(0x88bbff, 0.55); rim.position.set(-4,3,-3); scene.add(rim);
+const grid = new THREE.GridHelper(16, 32, 0x223322, 0x141414); scene.add(grid);
+
+const WHITE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.08 });
+const figure = new THREE.Group(); scene.add(figure);
+
+const JOINTS = ['head','neck','chest','hip','lShoulder','rShoulder','lElbow','rElbow','lHand','rHand','lHipJ','rHipJ','lKnee','rKnee','lFoot','rFoot'];
+const BONES = [['head','neck'],['neck','chest'],['chest','hip'],['neck','lShoulder'],['neck','rShoulder'],
+  ['lShoulder','lElbow'],['lElbow','lHand'],['rShoulder','rElbow'],['rElbow','rHand'],
+  ['hip','lHipJ'],['hip','rHipJ'],['lHipJ','lKnee'],['lKnee','lFoot'],['rHipJ','rKnee'],['rKnee','rFoot']];
+
+const jointMeshes = {};
+for (const n of JOINTS) {
+  const r = n==='head' ? 0.16 : 0.055;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r,16,16), WHITE); figure.add(m); jointMeshes[n]=m;
 }
+const boneMeshes = BONES.map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1,12), WHITE); figure.add(m); return m; });
+const UP = new THREE.Vector3(0,1,0);
+function setBone(mesh,a,b){ const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b);
+  const mid=av.clone().add(bv).multiplyScalar(0.5); const dir=bv.clone().sub(av); const len=dir.length()||0.001;
+  mesh.position.copy(mid); mesh.scale.set(1,len,1); mesh.quaternion.setFromUnitVectors(UP,dir.clone().normalize()); }
+function apply3D(pose){ for(const n in pose){ if(jointMeshes[n]) jointMeshes[n].position.set(...pose[n]); }
+  BONES.forEach((b,i)=>setBone(boneMeshes[i],pose[b[0]],pose[b[1]])); }
 
-// Region-balanced order: shuffle each region's moves, then round-robin pull
-// one from each region in turn (India, Iran, Turkey, China, repeat). Result:
-// every session cycles through all four cultures evenly, and consecutive
-// moves are almost always from different countries — so it never feels like
-// "all Indian dances" and looks different each time.
-function shuffleOrder() {
-  if (!moveIndexByRegion) buildRegionIndex();
-  const pools = {};
-  for (const r of REGION_ORDER) pools[r] = shuffleArr(moveIndexByRegion[r].slice());
-  // randomize which region starts, so sessions don't always open with India
-  const startOffset = (Math.random() * REGION_ORDER.length) | 0;
-  const order = [];
-  let remaining = REGION_ORDER.reduce((s, r) => s + pools[r].length, 0);
-  let step = 0;
-  while (remaining > 0) {
-    const r = REGION_ORDER[(startOffset + step) % REGION_ORDER.length];
-    if (pools[r].length) { order.push(pools[r].shift()); remaining--; }
-    step++;
-  }
-  moveOrder = order;
-  orderPos = 0;
-  moveIdx = moveOrder[0];
-}
+/* ============================================================
+   PART 4 — Systems: session, shuffle, timing, music, tracking
+   ============================================================ */
+const SESSION_LENGTH = 85;
+const MOVE_TIME = 5.0;
+let sessionActive=false, sessionStart=0, running=false;
+let move0=null, danceClock=0;
+let speedFactor=1.0;
+const MOTION_BASE=1.3;
 
-// ---- No built-in music. Sound comes from the room via the 🎤 Listen
-// toggle only; with Listen off, the figure dances on its own timing. ----
+// region rotation (reuse the extracted moveRegion + REGION_ORDER from engine)
+let moveOrder=[], orderPos=0, moveIdx=0;
+function shuffleArr(a){ for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
+let idxByRegion=null;
+function buildIdx(){ idxByRegion={}; for(const r of REGION_ORDER) idxByRegion[r]=[]; DANCE_MOVES.forEach((m,i)=>idxByRegion[moveRegion(m.dance)].push(i)); }
+function makeOrder(){ if(!idxByRegion) buildIdx();
+  const pools={}; for(const r of REGION_ORDER) pools[r]=shuffleArr(idxByRegion[r].slice());
+  const regions=shuffleArr(REGION_ORDER.slice()); const order=[];
+  let rem=REGION_ORDER.reduce((s,r)=>s+pools[r].length,0),step=0;
+  while(rem>0){ const r=regions[step%regions.length]; if(pools[r].length){order.push(pools[r].shift());rem--;} step++; }
+  moveOrder=order; orderPos=0; moveIdx=order[0]; }
 
-// ---- Live beat detection from the room (mic) ----
-// Taps the microphone, watches low-frequency (bass/kick) energy, and fires a
-// "beat" when that energy spikes above a rolling average — classic onset
-// detection. It also tracks overall loudness (0..1) so the dance can move
-// bigger when the music is energetic. This reacts to sound energy only; it
-// doesn't understand lyrics or melody, so it works with any music, any
-// language. Everything runs locally in the browser — nothing is uploaded.
-let micActive = false;
-let micCtx = null, micStream = null, micAnalyser = null, micData = null, micRaf = null;
-let beatEnergy = 0;       // smoothed loudness 0..1, drives movement size
-let beatPulse = 0;        // decays after each detected beat, 0..1
-let musicalPhase = 0;     // advances with beats — the dance's "clock"
-let lastBeatAt = 0, bassAvg = 0;
-
-async function startMicListen() {
-  micCtx = new (window.AudioContext || window.webkitAudioContext)();
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: {
-    echoCancellation: false, noiseSuppression: false, autoGainControl: false
-  }, video: false });
-  const src = micCtx.createMediaStreamSource(micStream);
-  micAnalyser = micCtx.createAnalyser();
-  micAnalyser.fftSize = 1024;
-  micAnalyser.smoothingTimeConstant = 0.6;
-  src.connect(micAnalyser);
-  micData = new Uint8Array(micAnalyser.frequencyBinCount);
-  micActive = true;
-  bassAvg = 0; lastBeatAt = 0;
-  const loop = () => {
-    if (!micActive) return;
-    micAnalyser.getByteFrequencyData(micData);
-    // bass band: first several FFT bins (roughly < ~250Hz — kick/bass drum)
-    const bassBins = 8;
-    let bass = 0; for (let i = 1; i <= bassBins; i++) bass += micData[i];
-    bass /= (bassBins * 255); // 0..1
-    // overall loudness across the spectrum
-    let total = 0; for (let i = 0; i < micData.length; i++) total += micData[i];
-    const loud = total / (micData.length * 255);
-    beatEnergy += (Math.min(1, loud * 3.2) - beatEnergy) * 0.15;
-
-    // onset detection: beat when bass jumps above its rolling average.
-    // Lower threshold + shorter refractory so normal music actually triggers.
-    const now = performance.now() / 1000;
-    bassAvg += (bass - bassAvg) * 0.12;
-    if (bass > bassAvg * 1.18 + 0.015 && (now - lastBeatAt) > 0.18) {
-      lastBeatAt = now;
-      beatPulse = 1;
-    }
-    beatPulse *= 0.86;
-    micRaf = requestAnimationFrame(loop);
-  };
+// music listen (reused, simplified)
+let micActive=false, micCtx=null, micStream=null, micAnalyser=null, micData=null, micRaf=null;
+let beatEnergy=0, musicPresence=0, beatGapAvg=0.5, lastBeatAt=0, bassAvg=0, musicalPhase=0, beatPulse=0;
+async function startMic(){ try{
+  micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  micCtx=new (window.AudioContext||window.webkitAudioContext)();
+  const src=micCtx.createMediaStreamSource(micStream);
+  micAnalyser=micCtx.createAnalyser(); micAnalyser.fftSize=1024; micAnalyser.smoothingTimeConstant=0.7;
+  src.connect(micAnalyser); micData=new Uint8Array(micAnalyser.frequencyBinCount); micActive=true;
+  const loop=()=>{ if(!micActive)return; micAnalyser.getByteFrequencyData(micData);
+    const binHz=micCtx.sampleRate/micAnalyser.fftSize, bin=hz=>Math.max(1,Math.min(micData.length-1,Math.round(hz/binHz)));
+    let bass=0,nb=0; for(let i=bin(40);i<=bin(180);i++){bass+=micData[i];nb++;} bass/= (nb*255);
+    let sp=0,ns=0; for(let i=bin(300);i<=bin(3400);i++){sp+=micData[i];ns++;} sp/=(ns*255);
+    let hi=0,nh=0; for(let i=bin(5000);i<=bin(12000);i++){hi+=micData[i];nh++;} hi/=(nh*255);
+    const ms=Math.max(0,(bass+hi)-sp*0.9); musicPresence+=(Math.min(1,ms*2.2)-musicPresence)*0.08;
+    const ml=(bass*1.3+hi*0.7)*(0.4+0.6*musicPresence); beatEnergy+=(Math.min(1,ml*2.6)-beatEnergy)*0.15;
+    const now=performance.now()/1000; bassAvg+=(bass-bassAvg)*0.12;
+    if(bass>bassAvg*1.18+0.015 && (now-lastBeatAt)>0.18 && musicPresence>0.15){
+      if(lastBeatAt>0){const gap=now-lastBeatAt; if(gap>0.22&&gap<1.6) beatGapAvg+=(gap-beatGapAvg)*0.2;} lastBeatAt=now; beatPulse=1; }
+    beatPulse*=0.86; micRaf=requestAnimationFrame(loop); };
   loop();
-}
-function stopMicListen() {
-  micActive = false;
-  if (micRaf) cancelAnimationFrame(micRaf);
-  if (micStream) { micStream.getTracks().forEach(tr => tr.stop()); micStream = null; }
-  if (micCtx) { try { micCtx.close(); } catch(e){} micCtx = null; }
-  beatEnergy = 0; beatPulse = 0;
-}
+}catch(e){ micActive=false; } }
+function stopMic(){ micActive=false; if(micRaf)cancelAnimationFrame(micRaf); if(micStream)micStream.getTracks().forEach(t=>t.stop()); if(micCtx)micCtx.close(); }
 
-let transitionStart = null;
-const TRANSITION_TIME = 1.5;
-let lastMimicPose = null;
+function moveEnergy(mv){ const s=(mv.name+' '+mv.text).toLowerCase();
+  if(/jump|kick|stomp|spin|leap|shimmy|split|vibrat|rapid|fast|batter|strike|pop|clap|bounce|whip|explos/.test(s))return 2;
+  if(/still|slow|glide|hold|arch|sway|calm|deliberate|float|gentle|controlled|salut|prayer|bow|weight shift/.test(s))return 0;
+  return 1; }
+function pickForMusic(te){ for(let k=1;k<=moveOrder.length;k++){ const idx=moveOrder[(orderPos+k)%moveOrder.length];
+  if(moveEnergy(DANCE_MOVES[idx])===te){ orderPos=(orderPos+k)%moveOrder.length; return idx; } }
+  orderPos=(orderPos+1)%moveOrder.length; return moveOrder[orderPos]; }
 
-// ---- Female-voice narration (Web Speech API) ----
-// Speaks each move's instruction aloud instead of printing it on screen.
-// Picks a natural-sounding female English voice when the device has one.
-let speechVoice = null, lastSpokenIdx = -1, voiceEnabled = true;
-function pickVoice() {
-  const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  if (!voices.length) return;
-  const prefer = [
-    'Google UK English Female','Google US English','Microsoft Aria','Microsoft Zira',
-    'Samantha','Karen','Serena','Fiona','Victoria','Tessa','Moira'
-  ];
-  for (const name of prefer) {
-    const v = voices.find(v => v.name === name || v.name.includes(name));
-    if (v) { speechVoice = v; return; }
+// advance moves + produce a 3D pose
+let lastRevolve=0;
+function current3DPose(now){
+  if(move0===null) move0=now;
+  if(now-move0>=MOVE_TIME){
+    if(micActive && musicPresence>0.18){
+      const fast=beatGapAvg<0.42, slow=beatGapAvg>0.75;
+      let te = (beatEnergy>0.5||fast)?2 : (beatEnergy<0.22||slow)?0 : 1;
+      moveIdx=pickForMusic(te);
+    } else { orderPos=(orderPos+1)%moveOrder.length; moveIdx=moveOrder[orderPos]; }
+    move0=now; showGuideInfo();
   }
-  // fall back to any English voice that isn't explicitly male
-  speechVoice = voices.find(v => /en/i.test(v.lang) && !/male|david|mark|daniel|alex|fred/i.test(v.name)) || voices[0];
-}
-if (window.speechSynthesis) {
-  pickVoice();
-  speechSynthesis.onvoiceschanged = pickVoice;
-}
-function speakInstruction(text) {
-  if (!voiceEnabled || !window.speechSynthesis || !text) return;
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    if (speechVoice) u.voice = speechVoice;
-    u.rate = 0.9;      // calm, teacherly pace
-    u.pitch = 1.05;    // gentle, natural female tone
-    u.volume = 1.0;
-    speechSynthesis.speak(u);
-  } catch (e) { /* speech optional */ }
+  // dance clock: slider always applies; mic modulates
+  let dt;
+  if(micActive){ musicalPhase += (1/60)*(1.4+beatEnergy*1.6)*speedFactor + beatPulse*0.12*speedFactor; dt=musicalPhase; }
+  else { dt = now * MOTION_BASE * speedFactor; }
+  const raw = DANCE_MOVES[moveIdx].fn(dt);
+  lastRevolve = lastRevolveCapture; // set by poseFrom via global
+  return pose2Dto3D(raw);
 }
 
-function startSession(t) {
-  shuffleOrder();
-  sessionStart = t;
-  move0 = t;
-  sessionActive = true;
-  transitionStart = t;
-  smoothPose = null;
-  smoothVel = null;
-  lastFrameT = null;
-  lastSpokenIdx = -1;
-  sessionCount++;
-}
-function endSession() {
-  sessionActive = false;
-  transitionStart = null;
-  if (window.speechSynthesis) speechSynthesis.cancel();
-}
-
-const MOVE_TIME = 9.0;
-const BLEND = 1.2;
-const MOTION_SPEED_BASE = 2.4;   // baseline liveliness
-let speedFactor = 1.0;           // user slider multiplier (0.5–2.5)
-let MOTION_SPEED = MOTION_SPEED_BASE * speedFactor;
-
-// --- Wandering: a gentle horizontal weight-shift while performing. Vertical
-// drift is removed entirely — a grounded body doesn't levitate; any up/down
-// comes from the dance itself (knee bends, steps), not free-space floating.
-function wanderOffset(t) {
-  const wx = Math.sin(t*0.35) * 0.05 + Math.sin(t*0.13+2.1) * 0.03;
-  return { x: wx, y: 0 };
+/* ============================================================
+   PART 5 — Camera "YOU" 2D tracking (kept 2D, side-by-side)
+   ============================================================ */
+const video=document.getElementById('video');
+const camCanvas=document.getElementById('camCanvas'); const cctx=camCanvas.getContext('2d');
+let detector=null, modelReady=false, camReady=false;
+function loadModelP(){ if(!window.__mp){ window.__mp=(async()=>{ await tf.setBackend('webgl'); await tf.ready();
+  detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}); })(); } return window.__mp; }
+window.addEventListener('load',()=>{ if(window.tf&&window.poseDetection) loadModelP().then(()=>modelReady=true).catch(()=>{}); });
+async function setupCam(){ const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+  video.srcObject=s; await new Promise(r=>{video.onloadedmetadata=()=>{video.play();r();};}); camReady=true; }
+function sizeCam(){ camCanvas.width=camCanvas.clientWidth; camCanvas.height=camCanvas.clientHeight; }
+const PAIRS=[['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+  ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+  ['left_hip','right_hip'],['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle']];
+async function drawYou(){ const w=camCanvas.width,h=camCanvas.height; cctx.clearRect(0,0,w,h);
+  // draw mirrored video
+  cctx.save(); cctx.translate(w,0); cctx.scale(-1,1); cctx.drawImage(video,0,0,w,h); cctx.restore();
+  if(detector){ try{ const poses=await detector.estimatePoses(video,{flipHorizontal:false});
+    if(poses[0]){ const kp={}; poses[0].keypoints.forEach(p=>{if(p.score>0.35)kp[p.name]={x:(1-p.x/video.videoWidth)*w,y:p.y/video.videoHeight*h};});
+      cctx.strokeStyle='rgba(34,160,90,0.95)'; cctx.lineWidth=5; cctx.lineCap='round';
+      PAIRS.forEach(([a,b])=>{ if(kp[a]&&kp[b]){cctx.beginPath();cctx.moveTo(kp[a].x,kp[a].y);cctx.lineTo(kp[b].x,kp[b].y);cctx.stroke();} });
+    } }catch(e){} }
 }
 
-// --- Weighted, spring-based motion (replaces plain lerp) ---
-// Each joint gets a relative mass — a rough 60kg body's weight distribution:
-// the pelvis/hips carry the most mass and move slowest/heaviest, wrists are
-// light and quick, matching how a real body actually accelerates its parts.
-const JOINT_WEIGHT = {
-  nose: 0.9,
-  left_shoulder: 1.3, right_shoulder: 1.3,
-  left_elbow: 0.7, right_elbow: 0.7,
-  left_wrist: 0.45, right_wrist: 0.45,
-  left_hip: 1.8, right_hip: 1.8,
-  left_knee: 0.9, right_knee: 0.9,
-  left_ankle: 0.55, right_ankle: 0.55,
+/* ============================================================
+   PART 6 — UI wiring + main loop
+   ============================================================ */
+const startScreen=document.getElementById('startScreen'), byeScreen=document.getElementById('byeScreen');
+const controlsEl=document.getElementById('controls'), statusEl=document.getElementById('status');
+const guideText=document.getElementById('guideText'), timerEl=document.getElementById('timer');
+const gName=document.getElementById('gName'), gRegion=document.getElementById('gRegion'), gText=document.getElementById('gText');
+function showGuideInfo(){ const m=DANCE_MOVES[moveIdx]; gName.textContent=m.name; gRegion.textContent=m.dance; gText.textContent=m.text; }
+
+document.getElementById('yesBtn').onclick=async()=>{
+  startScreen.classList.add('hidden'); controlsEl.classList.remove('hidden');
+  guideText.classList.remove('hidden'); timerEl.classList.remove('hidden'); statusEl.classList.remove('hidden');
+  statusEl.textContent='Starting…';
+  if(!camReady){ try{ await setupCam(); }catch(e){} }
+  sizeCam();
+  if(!modelReady){ statusEl.textContent='Loading…'; try{ await loadModelP(); modelReady=true; }catch(e){} }
+  statusEl.textContent='';
+  makeOrder(); showGuideInfo();
+  sessionActive=true; sessionStart=performance.now()/1000; move0=null; running=true;
 };
-const BASE_STIFFNESS = 150;
-const DAMP_RATIO = 0.72; // <1 = a little overshoot/settle, like real momentum
+document.getElementById('noBtn').onclick=()=>{ /* stays on start */ };
+const listenBtn=document.getElementById('listenBtn');
+listenBtn.onclick=()=>{ if(!micActive){ startMic(); listenBtn.classList.add('on'); listenBtn.textContent='🎤 Listening'; }
+  else { stopMic(); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen'; } };
+const speedSlider=document.getElementById('speedSlider'), speedVal=document.getElementById('speedVal');
+speedSlider.oninput=()=>{ speedFactor=parseFloat(speedSlider.value); speedVal.textContent=speedFactor.toFixed(1)+'×'; };
+document.getElementById('fsBtn').onclick=()=>{ const el=document.documentElement;
+  if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); } };
 
-let smoothPose = null, smoothVel = null, lastFrameT = null;
-function springToward(target, dt) {
-  if (!smoothPose) {
-    smoothPose = {}; smoothVel = {};
-    for (const k in target) { smoothPose[k] = { x: target[k].x, y: target[k].y }; smoothVel[k] = { x: 0, y: 0 }; }
-    return smoothPose;
-  }
-  for (const k in target) {
-    if (!smoothPose[k]) { smoothPose[k] = { x: target[k].x, y: target[k].y }; smoothVel[k] = { x: 0, y: 0 }; }
-    const stiff = BASE_STIFFNESS / (JOINT_WEIGHT[k] || 1);
-    const damp = 2 * Math.sqrt(stiff) * DAMP_RATIO;
-    const dx = target[k].x - smoothPose[k].x, dy = target[k].y - smoothPose[k].y;
-    const ax = dx*stiff - smoothVel[k].x*damp;
-    const ay = dy*stiff - smoothVel[k].y*damp;
-    smoothVel[k].x += ax*dt; smoothVel[k].y += ay*dt;
-    smoothPose[k].x += smoothVel[k].x*dt; smoothPose[k].y += smoothVel[k].y*dt;
-  }
-  return smoothPose;
-}
+function endSession(){ sessionActive=false; running=false; stopMic(); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen';
+  byeScreen.classList.remove('hidden'); setTimeout(()=>location.reload(), 3500); }
 
-// --- Counterbalance: the reason a real body never looks weightless ---
-// When one leg lifts, real weight has to go somewhere — the hips and torso
-// shift over the still-planted leg, and the whole core dips slightly as it
-// takes the load. Nothing here decides to do that; it's just what a 60kg
-// body does to keep from falling over. This runs on every move, not just
-// the ones that were hand-written to include it.
-function applyCounterbalance(pose) {
-  const la = pose.left_ankle, ra = pose.right_ankle;
-  if (!la || !ra) return pose;
-  const baseAnkleY = HIPY + 0.32;
-  const leftLift = Math.max(0, baseAnkleY - la.y);
-  const rightLift = Math.max(0, baseAnkleY - ra.y);
-  const net = rightLift - leftLift; // >0: right leg is up, weight goes left
-  const shiftX = Math.max(-0.045, Math.min(0.045, -net * 0.85));
-  const dip = Math.min(0.022, Math.max(leftLift, rightLift) * 0.16);
-  if (!shiftX && !dip) return pose;
-  const out = {};
-  for (const k in pose) out[k] = { x: pose[k].x, y: pose[k].y };
-  ['left_hip','right_hip'].forEach(k => { if (out[k]) { out[k].x += shiftX; out[k].y += dip; } });
-  ['left_shoulder','right_shoulder'].forEach(k => { if (out[k]) out[k].x += shiftX*0.55; });
-  if (out.nose) out.nose.x += shiftX*0.3;
-  return out;
-}
+function onResize(){ camera.aspect=camW()/camH(); camera.updateProjectionMatrix(); renderer.setSize(camW(),camH()); sizeCam(); }
+addEventListener('resize', onResize);
 
-function currentMovePose(t) {
-  if (move0 === null) move0 = t;
-  const elapsed = t - move0;
-  if (elapsed >= MOVE_TIME) {
-    orderPos = (orderPos + 1) % moveOrder.length;
-    moveIdx = moveOrder[orderPos];
-    move0 = t;
-  }
-  // Global liveliness: the hand-authored moves were tuned quite slow. This
-  // multiplier speeds up the time fed into every move at once (mic-off), so
-  // the whole set reads as more energetic without touching all 56 functions.
-  let danceT = t * MOTION_SPEED;
-  if (micActive) {
-    musicalPhase += (1/60) * (2.2 + beatEnergy * 2.2) + beatPulse * 0.16;
-    danceT = musicalPhase;
-  }
-  let pose;
-  const e2 = t - move0;
-  const cur = DANCE_MOVES[moveIdx].fn(danceT);
-  if (e2 > MOVE_TIME - BLEND) {
-    let f = (e2 - (MOVE_TIME - BLEND)) / BLEND;
-    f = f < 0.5 ? 2*f*f : 1 - Math.pow(-2*f+2, 2)/2;
-    const nextIdx = moveOrder[(orderPos + 1) % moveOrder.length];
-    const nxt = DANCE_MOVES[nextIdx].fn(danceT);
-    pose = lerpPose(cur, nxt, f);
-  } else {
-    pose = cur;
-  }
-  // Energy → movement size: louder music pushes the limbs further from the
-  // body's center; a beat pulse adds a little punch on the hit.
-  if (micActive) {
-    const amp = 1 + beatEnergy * 0.28 + beatPulse * 0.12;
-    const pelvisX = ((pose.left_hip?.x ?? CXX) + (pose.right_hip?.x ?? CXX)) / 2;
-    const pelvisY = ((pose.left_hip?.y ?? HIPY) + (pose.right_hip?.y ?? HIPY)) / 2;
-    const scaled = {};
-    for (const k in pose) scaled[k] = {
-      x: pelvisX + (pose[k].x - pelvisX) * amp,
-      y: pelvisY + (pose[k].y - pelvisY) * amp,
-    };
-    pose = scaled;
-  }
-  const wo = wanderOffset(t);
-  const moved = {};
-  for (const k in pose) moved[k] = { x: pose[k].x + wo.x, y: pose[k].y + wo.y };
-  const balanced = applyCounterbalance(moved);
-
-  const dt = lastFrameT === null ? 1/60 : Math.max(0.0008, Math.min(0.05, t - lastFrameT));
-  lastFrameT = t;
-  const smoothed = springToward(balanced, dt);
-
-  // Natural imperfection: each joint gets its own tiny, slow drift phase so
-  // the whole body doesn't move in perfect lockstep like a machine — this is
-  // the difference between a dancer and a servo motor.
-  const out = {};
-  for (const k in smoothed) {
-    const ph = jointPhase(k);
-    const jx = Math.sin(t*1.7 + ph)*0.0028 + Math.sin(t*0.55 + ph*1.3)*0.0018;
-    const jy = Math.cos(t*1.35 + ph*0.85)*0.0024;
-    out[k] = { x: smoothed[k].x + jx, y: smoothed[k].y + jy };
-  }
-  return out;
-}
-function currentMoveName() { return DANCE_MOVES[moveIdx].name; }
-
-// Deterministic pseudo-random phase per joint name, so the jitter above is
-// stable frame-to-frame but different per limb.
-const _jointPhaseCache = {};
-function jointPhase(key) {
-  if (_jointPhaseCache[key] == null) {
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) hash = (hash*31 + key.charCodeAt(i)) >>> 0;
-    _jointPhaseCache[key] = (hash % 1000) / 1000 * Math.PI * 2;
-  }
-  return _jointPhaseCache[key];
-}
-
-// Stick-LINE figure: a single spine line, with arms and legs branching off —
-// no torso rectangle. Bendable, elegant. Two coordinate modes:
-//  - default: joints are template-space (centered on CXX/HIPY), positioned
-//    and uniformly scaled via opts.align — used before real proportions
-//    are known.
-//  - opts.direct: joints are already absolute normalized (0..1) screen
-//    coordinates, e.g. from retargetPose() — mapped straight through with
-//    no recentering/rescaling, since sizing is already baked into the bone
-//    lengths themselves.
-// opts.ctx lets the same drawer be reused on a different canvas (bye screen).
-function drawStickLine(joints, rect, opts) {
-  const c = opts.ctx || ctx;
-  let px, py, scaleMul;
-  if (opts.direct) {
-    px = (nx) => rect.x + nx * rect.w;
-    py = (ny) => rect.y + ny * rect.h;
-    scaleMul = 1;
-  } else {
-    const align = opts.align || { cx: CXX, cy: HIPY, scale: 1 };
-    scaleMul = (opts.sc || 1) * (align.scale || 1);
-    px = (nx) => rect.x + (align.cx + (nx - CXX) * scaleMul) * rect.w;
-    py = (ny) => rect.y + (align.cy + (ny - HIPY) * scaleMul) * rect.h;
-  }
-  const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
-  const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
-
-  const ls=P('left_shoulder'), rs=P('right_shoulder'), lh=P('left_hip'), rh=P('right_hip');
-  const neck = mid(ls, rs);
-  const pelvis = mid(lh, rh);
-
-  const seg = (a, b) => { if(!a||!b) return; c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); };
-  const nose = P('nose');
-
-  // Feet: a short line from each ankle pointing outward (away from the body
-  // center), sized relative to the shin. Palms: a small circle just beyond
-  // each wrist, continuing the forearm's direction. Both make the leg and
-  // hand positions of a move far easier to read at a glance.
-  const bodyCX = pelvis ? pelvis.x : (neck ? neck.x : rect.x + rect.w/2);
-  const foot = (ankle, knee) => {
-    if (!ankle || !knee) return;
-    const shinLen = Math.hypot(ankle.x-knee.x, ankle.y-knee.y) || 1;
-    const fLen = shinLen * 0.30;
-    const dirX = ankle.x >= bodyCX ? 1 : -1;
-    c.beginPath();
-    c.moveTo(ankle.x, ankle.y);
-    c.lineTo(ankle.x + dirX*fLen, ankle.y - fLen*0.08);
-    c.stroke();
-  };
-  const palm = (wrist, elbow, shoulder, side) => {
-    if (!wrist || !elbow) return;
-    const armLen = Math.hypot(wrist.x-elbow.x, wrist.y-elbow.y) || 1;
-    const hLen = Math.max(4, armLen * 0.30);
-    const dx = (wrist.x-elbow.x)/armLen, dy = (wrist.y-elbow.y)/armLen;
-    // Hand angle follows the dance position: when the arm is EXTENDED the
-    // palm continues the long line (the classic stretched dance arm); when
-    // the arm is BENT the palm flares outward. Measured from the elbow bend.
-    let flare = 0.5;
-    if (shoulder) {
-      const uLen = Math.hypot(shoulder.x-elbow.x, shoulder.y-elbow.y) || 1;
-      const ux = (shoulder.x-elbow.x)/uLen, uy = (shoulder.y-elbow.y)/uLen;
-      const cosBend = ux*dx + uy*dy;    // -1 = straight arm, +1 = folded
-      flare = (cosBend + 1) / 2;        // 0 = extended, 1 = folded
-    }
-    const a = (side === 'left' ? -1 : 1) * (0.10 + flare * 0.75);
-    const cs = Math.cos(a), sn = Math.sin(a);
-    const hx = dx*cs - dy*sn, hy = dx*sn + dy*cs;
-    c.beginPath();
-    c.moveTo(wrist.x, wrist.y);
-    c.lineTo(wrist.x + hx*hLen, wrist.y + hy*hLen);
-    c.stroke();
-  };
-
-  const drawSkeleton = () => {
-    seg(neck, pelvis);
-    seg(ls, rs);
-    seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
-    seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
-    seg(lh, rh);
-    seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
-    seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
-    foot(P('left_ankle'), P('left_knee'));
-    foot(P('right_ankle'), P('right_knee'));
-    palm(P('left_wrist'), P('left_elbow'), ls, 'left');
-    palm(P('right_wrist'), P('right_elbow'), rs, 'right');
-    if (nose) { c.beginPath(); c.arc(nose.x, nose.y, (opts.headR||14)*scaleMul, 0, Math.PI*2); c.stroke(); }
-    if (nose && neck) seg(nose, neck);
-  };
-
-  c.save();
-  c.beginPath(); c.rect(rect.x, rect.y, rect.w, rect.h); c.clip();
-  c.lineCap = 'round'; c.lineJoin = 'round';
-
-  // Single clean pass in the guide color, with a soft drop shadow for
-  // legibility against any background — no heavy dark outline behind it.
-  c.strokeStyle = opts.color;
-  c.lineWidth = opts.width;
-  c.shadowColor = 'rgba(0,0,0,0.55)';
-  c.shadowBlur = 6;
-  drawSkeleton();
-
-  c.restore();
-  // Report where the head landed on screen so the caller can place text above it
-  return nose || neck || pelvis || { x: rect.x + rect.w/2, y: rect.y + rect.h*0.25 };
-}
-
-// Draw the (optionally filtered) camera video into a rect, mirrored, with a
-// proper "cover" crop so the picture never stretches/squeezes to fit the
-// screen's aspect ratio.
-function drawCameraToRect(rect, mode) {
-  const vw = video.videoWidth||0, vh = video.videoHeight||0;
-  if (!vw || !vh) return;
-  updateCamCrop(rect);
-  const sx = camCrop.sx*vw, sy = camCrop.sy*vh, sw = camCrop.sw*vw, sh = camCrop.sh*vh;
-  if (mode === 'thermal' || mode === 'negative') {
-    const outW = 200, outH = Math.max(2, Math.round(200*sh/sw));
-    offCanvas.width = outW; offCanvas.height = outH;
-    offCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
-    let img; try { img = offCtx.getImageData(0,0,outW,outH); } catch(e){ return; }
-    const d = img.data;
-    if (mode === 'thermal') {
-      for (let i=0;i<d.length;i+=4){ const L=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; const c=thermalColor(L); d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; }
-    } else {
-      for (let i=0;i<d.length;i+=4){ d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; }
-    }
-    offCtx.putImageData(img,0,0);
-    ctx.save();
-    ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
-    ctx.imageSmoothingEnabled = true;
-    ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
-    ctx.drawImage(offCanvas, 0,0,outW,outH, 0,0, rect.w, rect.h);
-    ctx.restore();
-  } else {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.w,rect.h); ctx.clip();
-    ctx.translate(rect.x+rect.w, rect.y); ctx.scale(-1,1);
-    ctx.drawImage(video, sx, sy, sw, sh, 0,0, rect.w, rect.h);
-    ctx.restore();
-  }
-}
-
-// Face-only mosaic blur inside a rect (pixel mode).
-function drawFaceBlurRect(joints, rect) {
-  const vw = video.videoWidth||0, vh = video.videoHeight||0;
-  if (!vw || !vh) return;
-  const nose = joints.nose; if (!nose) return;
-  const le = joints.left_eye, re = joints.right_eye, lear=joints.left_ear, rear=joints.right_ear;
-  let halfW;
-  if (le && re) halfW = Math.hypot(le.x-re.x, le.y-re.y)*1.7;
-  else if (lear && rear) halfW = Math.hypot(lear.x-rear.x, lear.y-rear.y)*0.95;
-  else halfW = 0.12;
-  halfW = Math.max(0.06, Math.min(0.28, halfW));
-  let nx0=nose.x-halfW, ny0=nose.y-halfW*1.15, nw=halfW*2, nh=halfW*2.35;
-  nx0=Math.max(0,nx0); ny0=Math.max(0,ny0); nw=Math.min(1-nx0,nw); nh=Math.min(1-ny0,nh);
-  const bx=(nx0*vw)|0, by=(ny0*vh)|0, bw=Math.max(2,(nw*vw)|0), bh=Math.max(2,(nh*vh)|0);
-  offCanvas.width=bw; offCanvas.height=bh;
-  offCtx.drawImage(video, bx,by,bw,bh, 0,0,bw,bh);
-  let img; try{img=offCtx.getImageData(0,0,bw,bh);}catch(e){return;}
-  const d=img.data, block=Math.max(4,(bw/12)|0);
-  for(let yy=0;yy<bh;yy+=block)for(let xx=0;xx<bw;xx+=block){
-    let r=0,g=0,b=0,n=0;
-    for(let j=0;j<block;j++)for(let k=0;k<block;k++){const p2=xx+k,q2=yy+j;if(p2>=bw||q2>=bh)continue;const idx=(q2*bw+p2)*4;r+=d[idx];g+=d[idx+1];b+=d[idx+2];n++;}
-    r/=n;g/=n;b/=n;
-    for(let j=0;j<block;j++)for(let k=0;k<block;k++){const p2=xx+k,q2=yy+j;if(p2>=bw||q2>=bh)continue;const idx=(q2*bw+p2)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;}
-  }
-  offCtx.putImageData(img,0,0);
-  // map normalized box into rect (mirrored), through the same cover-crop
-  // used to draw the video, so the blur stays glued to the face
-  const d0 = toCropped(nx0, ny0), d1 = toCropped(nx0+nw, ny0+nh);
-  const dispW = d1.x - d0.x, dispH = d1.y - d0.y;
-  const sx0 = rect.x + (1-(d0.x+dispW))*rect.w, sy0 = rect.y + d0.y*rect.h;
-  const sw = dispW*rect.w, sh = dispH*rect.h;
-  ctx.save();
-  ctx.beginPath(); ctx.ellipse(sx0+sw/2, sy0+sh/2, sw/2, sh/2, 0, 0, 2*Math.PI); ctx.clip();
-  ctx.translate(sx0+sw, sy0); ctx.scale(-1,1);
-  ctx.drawImage(offCanvas, 0,0,bw,bh, 0,0, sw, sh);
-  ctx.restore();
-}
-
-// Direct green tracking line on the participant's own body — maps their
-// real detected joints 1:1 (mirrored), separate from the white guide figure
-// which is repositioned/rescaled to stand near them. This is the feedback
-// line: "here is exactly where the camera sees your body right now."
-function drawUserTracker(joints, rect, opts) {
-  const c = opts.ctx || ctx;
-  const px = (nx) => { const d = toCropped(nx, 0).x; return rect.x + (1 - d) * rect.w; };
-  const py = (ny) => { const d = toCropped(0, ny).y; return rect.y + d * rect.h; };
-  const P = (k) => { const j = joints[k]; return j ? { x: px(j.x), y: py(j.y) } : null; };
-  const mid = (a, b) => (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b);
-
-  const ls=P('left_shoulder'), rs=P('right_shoulder'), lh=P('left_hip'), rh=P('right_hip');
-  const neck = mid(ls, rs), pelvis = mid(lh, rh);
-  const seg = (a, b) => { if(!a||!b) return; c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); };
-
-  c.save();
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  c.strokeStyle = opts.color || 'rgba(34,190,110,0.9)';
-  c.fillStyle = opts.color || 'rgba(34,190,110,0.9)';
-  c.lineWidth = opts.width || 4;
-
-  seg(neck, pelvis);
-  seg(ls, rs);
-  seg(ls, P('left_elbow')); seg(P('left_elbow'), P('left_wrist'));
-  seg(rs, P('right_elbow')); seg(P('right_elbow'), P('right_wrist'));
-  seg(lh, rh);
-  seg(lh, P('left_knee')); seg(P('left_knee'), P('left_ankle'));
-  seg(rh, P('right_knee')); seg(P('right_knee'), P('right_ankle'));
-
-  const nose = P('nose');
-  if (nose) { c.beginPath(); c.arc(nose.x, nose.y, 6, 0, Math.PI*2); c.fill(); }
-  if (nose && neck) seg(nose, neck);
-
-  c.restore();
-}
-
-function keypointsToNamed(keypoints) {
-  const map = {};
-  keypoints.forEach(kp => {
-    if (kp.score > 0.35) {
-      map[kp.name] = { x: kp.x / video.videoWidth, y: kp.y / video.videoHeight };
-    }
-  });
-  return map;
-}
-
-// --- Alignment: where + how big the guide figure should stand, derived
-// from the participant's detected position. Smoothed so it doesn't jitter.
-// Falls back to a centered, gently wandering figure when nobody is seen.
-const TEMPLATE_SHOULDER_W = 0.18;
-let currentAlign = { cx: CXX, cy: HIPY, scale: 1 };
-// The floor: the y (0..1 display space) where the participant's feet meet the
-// ground. Detected from the lowest tracked ankle and smoothed, so the guide
-// has a real ground plane to stand on rather than floating in free space.
-let floorY = null;
-const FLOOR_SMOOTH = 0.06;
-function updateFloor(named, okB) {
-  if (!okB) return;
-  const ankles = [];
-  if (named.left_ankle) ankles.push(toCropped(named.left_ankle.x, named.left_ankle.y).y);
-  if (named.right_ankle) ankles.push(toCropped(named.right_ankle.x, named.right_ankle.y).y);
-  if (!ankles.length) return;
-  const lowest = Math.max(...ankles); // largest y = closest to bottom = floor
-  if (floorY === null) floorY = lowest;
-  else floorY += (lowest - floorY) * FLOOR_SMOOTH;
-}
-const ALIGN_SMOOTH = 0.12;
-// Partner mode: how the guide positions itself relative to the participant.
-// 'align'  — stands on/overlapping you (original behaviour)
-// 'left'   — stands beside you, to your left, like a dance partner
-// 'right'  — stands beside you, to your right
-let partnerMode = 'right';
-
-function updateAlign(named, okB) {
-  let target;
-  if (okB) {
-    const ls = named.left_shoulder, rs = named.right_shoulder;
-    const lh = named.left_hip, rh = named.right_hip;
-    const shoulderW = Math.hypot(ls.x - rs.x, ls.y - rs.y) || TEMPLATE_SHOULDER_W;
-    const shoulderCX = (ls.x + rs.x) / 2, shoulderCY = (ls.y + rs.y) / 2;
-    const hipCX = (lh && rh) ? (lh.x + rh.x) / 2 : shoulderCX;
-    const hipCY = (lh && rh) ? (lh.y + rh.y) / 2 : shoulderCY + 0.22;
-    // Crop-correct both the center point and the scale so sizing/position
-    // match what's actually shown on screen (see camCrop / toCropped above),
-    // not the uncropped raw camera frame.
-    const dHip = toCropped(hipCX, hipCY);
-    let scale = (shoulderW / camCrop.sw) / TEMPLATE_SHOULDER_W;
-    scale = Math.max(0.55, Math.min(1.75, scale));
-    let cx = 1 - dHip.x; // mirrored to match mirrored video
-    if (partnerMode === 'left') cx -= 0.36 * scale;
-    else if (partnerMode === 'right') cx += 0.36 * scale;
-    cx = Math.max(0.12, Math.min(0.88, cx));
-    target = { cx, cy: dHip.y, scale };
-  } else {
-    target = { cx: CXX, cy: HIPY, scale: 1 };
-  }
-  currentAlign.cx += (target.cx - currentAlign.cx) * ALIGN_SMOOTH;
-  currentAlign.cy += (target.cy - currentAlign.cy) * ALIGN_SMOOTH;
-  currentAlign.scale += (target.scale - currentAlign.scale) * ALIGN_SMOOTH;
-}
-
-// --- Real-proportions retargeting ---
-// Instead of scaling one fixed "template body" up and down uniformly (which
-// reads as a generic/childlike figure no matter who's standing there), this
-// measures each actual bone length off the tracked skeleton — the same
-// tracking data that draws the green line, which is accurate frame to frame
-// — and rebuilds the guide's skeleton bone-by-bone to match. The animated
-// pose (from currentMovePose) still supplies the DIRECTION each bone points
-// in; only the LENGTH of each bone comes from the real body. Whoever steps
-// in front of the camera, the guide is built to their proportions.
-function midPt(a, b) { return (a && b) ? { x:(a.x+b.x)/2, y:(a.y+b.y)/2 } : (a || b); }
-function normVec(dx, dy) {
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-5) return { x: 0, y: -1, len: 0 };
-  return { x: dx/len, y: dy/len, len };
-}
-
-// Sensible adult proportions (not a child, not oversized) — used whenever
-// nobody's tracked yet, and blended toward the real measured body once
-// someone steps in front of the camera.
-const DEFAULT_PROPORTIONS = {
-  shoulderW: 0.18, hipW: 0.16, spine: 0.22,
-  upperArm: 0.1166, forearm: 0.102,
-  thigh: 0.160, shin: 0.160, neckToNose: 0.12,
-};
-let bodyProportions = { ...DEFAULT_PROPORTIONS };
-const PROP_SMOOTH = 0.08;
-
-// Measure each bone length directly off the tracked joints (in display-
-// corrected normalized space, so it's not thrown off by the camera crop).
-function measureProportions(named) {
-  const ls=named.left_shoulder, rs=named.right_shoulder;
-  if (!ls || !rs) return null;
-  const disp = {};
-  for (const k in named) disp[k] = toCropped(named[k].x, named[k].y);
-  const d = (a,b) => (disp[a] && disp[b]) ? Math.hypot(disp[a].x-disp[b].x, disp[a].y-disp[b].y) : null;
-  const avg2 = (a,b) => (a!=null && b!=null) ? (a+b)/2 : (a!=null ? a : b);
-  const shoulderW = d('left_shoulder','right_shoulder') || DEFAULT_PROPORTIONS.shoulderW;
-  const hipW = d('left_hip','right_hip') || shoulderW * (DEFAULT_PROPORTIONS.hipW/DEFAULT_PROPORTIONS.shoulderW);
-  const neck = midPt(disp.left_shoulder, disp.right_shoulder);
-  const pelvis = (disp.left_hip && disp.right_hip) ? midPt(disp.left_hip, disp.right_hip) : null;
-  const spine = pelvis ? Math.hypot(neck.x-pelvis.x, neck.y-pelvis.y) : shoulderW*(DEFAULT_PROPORTIONS.spine/DEFAULT_PROPORTIONS.shoulderW);
-  const upperArm = avg2(d('left_shoulder','left_elbow'), d('right_shoulder','right_elbow')) || shoulderW*(DEFAULT_PROPORTIONS.upperArm/DEFAULT_PROPORTIONS.shoulderW);
-  const forearm = avg2(d('left_elbow','left_wrist'), d('right_elbow','right_wrist')) || shoulderW*(DEFAULT_PROPORTIONS.forearm/DEFAULT_PROPORTIONS.shoulderW);
-  const thigh = avg2(d('left_hip','left_knee'), d('right_hip','right_knee')) || shoulderW*(DEFAULT_PROPORTIONS.thigh/DEFAULT_PROPORTIONS.shoulderW);
-  const shin = avg2(d('left_knee','left_ankle'), d('right_knee','right_ankle')) || shoulderW*(DEFAULT_PROPORTIONS.shin/DEFAULT_PROPORTIONS.shoulderW);
-  const noseLen = (disp.nose && neck) ? Math.hypot(disp.nose.x-neck.x, disp.nose.y-neck.y) : shoulderW*(DEFAULT_PROPORTIONS.neckToNose/DEFAULT_PROPORTIONS.shoulderW);
-  return { shoulderW, hipW, spine, upperArm, forearm, thigh, shin, neckToNose: noseLen };
-}
-
-function updateBodyProportions(named, okB) {
-  const target = (okB && measureProportions(named)) || DEFAULT_PROPORTIONS;
-  for (const k in DEFAULT_PROPORTIONS) {
-    const v = target[k] != null ? target[k] : DEFAULT_PROPORTIONS[k];
-    bodyProportions[k] += (v - bodyProportions[k]) * PROP_SMOOTH;
-  }
-}
-
-// Plant the figure on the floor: shift the whole retargeted body vertically
-// so its lowest foot rests exactly on the detected floor line. This is what
-// makes it read as standing ON the ground with gravity, instead of floating
-// in free space. Only lifts the OTHER foot off the floor (as the dance
-// dictates) — the planted foot stays grounded. When no floor is known yet
-// (nobody tracked), it's left as-is.
-function groundPose(pose) {
-  if (floorY === null) return pose;
-  const la = pose.left_ankle, ra = pose.right_ankle;
-  if (!la && !ra) return pose;
-  const lowestFoot = Math.max(la ? la.y : -Infinity, ra ? ra.y : -Infinity);
-  const shift = floorY - lowestFoot; // move body so lowest foot meets floor
-  if (Math.abs(shift) < 1e-4) return pose;
-  const out = {};
-  for (const k in pose) out[k] = { x: pose[k].x, y: pose[k].y + shift };
-  return out;
-}
-
-// Rebuild the guide's skeleton: same pose (bone directions) as the animated
-// template, but each bone's length comes from bodyProportions. Output is
-// already-positioned, absolute normalized (0..1) screen-space coordinates —
-// drawStickLine's "direct" mode renders these as-is, no further scaling.
-function retargetPose(tjIn, align, prop) {
-  // Fill any joints missing from the input (e.g. a partial mimic pose when
-  // some body parts aren't detected) with the neutral template, so bone
-  // directions are always defined.
-  const base = basePose();
-  const tj = {};
-  for (const k of GUIDE_JOINTS) tj[k] = tjIn[k] || base[k];
-
-  const tPelvis = midPt(tj.left_hip, tj.right_hip);
-  const tNeck = midPt(tj.left_shoulder, tj.right_shoulder);
-  const root = { x: align.cx, y: align.cy };
-  const spineDir = normVec(tNeck.x-tPelvis.x, tNeck.y-tPelvis.y);
-  const neck = { x: root.x + spineDir.x*prop.spine, y: root.y + spineDir.y*prop.spine };
-
-  const out = {};
-  const place = (key, parentPt, tParent, tChild, length) => {
-    const dir = normVec(tChild.x-tParent.x, tChild.y-tParent.y);
-    out[key] = { x: parentPt.x + dir.x*length, y: parentPt.y + dir.y*length };
-  };
-
-  place('left_hip', root, tPelvis, tj.left_hip, prop.hipW/2);
-  place('right_hip', root, tPelvis, tj.right_hip, prop.hipW/2);
-  place('left_shoulder', neck, tNeck, tj.left_shoulder, prop.shoulderW/2);
-  place('right_shoulder', neck, tNeck, tj.right_shoulder, prop.shoulderW/2);
-  place('left_elbow', out.left_shoulder, tj.left_shoulder, tj.left_elbow, prop.upperArm);
-  place('right_elbow', out.right_shoulder, tj.right_shoulder, tj.right_elbow, prop.upperArm);
-  place('left_wrist', out.left_elbow, tj.left_elbow, tj.left_wrist, prop.forearm);
-  place('right_wrist', out.right_elbow, tj.right_elbow, tj.right_wrist, prop.forearm);
-  place('left_knee', out.left_hip, tj.left_hip, tj.left_knee, prop.thigh);
-  place('right_knee', out.right_hip, tj.right_hip, tj.right_knee, prop.thigh);
-  place('left_ankle', out.left_knee, tj.left_knee, tj.left_ankle, prop.shin);
-  place('right_ankle', out.right_knee, tj.right_knee, tj.right_ankle, prop.shin);
-  place('nose', neck, tNeck, tj.nose, prop.neckToNose);
-  return out;
-}
-
-// Gentle idle breathing pose for when no session is running yet.
-function idleBreathePose(t) {
-  const b = Math.sin(t * 1.1) * 0.014;
-  return poseFrom({
-    nose: { x: CXX + Math.sin(t*0.5)*0.01, y: 0.28 - b*0.5 },
-    left_shoulder: { x: CXX-0.09, y: SHY - b }, right_shoulder: { x: CXX+0.09, y: SHY - b },
-    left_elbow: { x: CXX-0.15, y: SHY+0.10 - b*0.6 }, right_elbow: { x: CXX+0.15, y: SHY+0.10 - b*0.6 },
-  });
-}
-
-// --- Mimic mode: the idle figure copies the participant's live pose ---
-// Converts the tracked skeleton into template-space directions. retargetPose
-// only cares about the DIRECTION each bone points, so we don't need to match
-// lengths here — we just hand it the participant's live joint directions,
-// mirrored so the figure faces the person like a mirror. When no one is
-// tracked it falls back to the gentle breathing idle.
-function mimicPoseFromTracked(named, t) {
-  if (!named || !named.left_shoulder || !named.right_shoulder) return idleBreathePose(t);
-  const mirror = {};
-  for (const k in named) {
-    // swap left/right so the mirrored figure's limbs match the person's
-    const mk = k.startsWith('left_') ? 'right_' + k.slice(5)
-             : k.startsWith('right_') ? 'left_' + k.slice(6) : k;
-    mirror[mk] = { x: 1 - named[k].x, y: named[k].y };
-  }
-  // Re-center the mirrored skeleton into template space around CXX/HIPY,
-  // scaled to a nominal template size, preserving all the joint angles.
-  const ls = mirror.left_shoulder, rs = mirror.right_shoulder;
-  const lh = mirror.left_hip, rh = mirror.right_hip;
-  const neckX = (ls.x + rs.x)/2, neckY = (ls.y + rs.y)/2;
-  const pelvisX = (lh && rh) ? (lh.x + rh.x)/2 : neckX;
-  const pelvisY = (lh && rh) ? (lh.y + rh.y)/2 : neckY + 0.22;
-  const spanY = Math.max(0.08, Math.hypot(pelvisX-neckX, pelvisY-neckY));
-  const scale = 0.22 / spanY; // normalize torso to template spine length
-  const out = {};
-  for (const k in mirror) {
-    out[k] = {
-      x: CXX + (mirror[k].x - pelvisX) * scale,
-      y: HIPY + (mirror[k].y - pelvisY) * scale,
-    };
-  }
-  return out;
-}
-
-const wrapText = (text, maxW, font) => {
-  ctx.font = font;
-  const words = (text||'').split(' ');
-  const lines = []; let line = '';
-  for (const wd of words) {
-    const test = line ? line + ' ' + wd : wd;
-    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = wd; }
-    else line = test;
-  }
-  if (line) lines.push(line);
-  return lines;
-};
-
-async function renderLoop() {
-  if (!running) return;
-  if (returningHome) { requestAnimationFrame(renderLoop); return; }
-  lastHeartbeat = performance.now();   // watchdog: prove the loop is alive
-  try {
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  const now = performance.now() / 1000;
-  const rect = { x: 0, y: 0, w, h };
-
-  // --- Full-bleed camera background ---
-  drawCameraToRect(rect, faceFilterMode);
-
-  // --- Detect the participant, so the guide can stand where they stand ---
-  let named = null, okB = false;
-  try {
-    const poses = await detector.estimatePoses(video, { flipHorizontal: false });
-    if (poses[0]) {
-      named = keypointsToNamed(poses[0].keypoints);
-      okB = !!(named.left_shoulder && named.right_shoulder && (named.left_hip || named.right_hip));
-      if (faceFilterMode === 'pixel') drawFaceBlurRect(named, rect);
-    }
-  } catch (e) { /* skip frame on transient error */ }
-  updateAlign(named, okB);
-  updateBodyProportions(named, okB);
-  updateFloor(named, okB);
-  if (named) drawUserTracker(named, rect, { color: 'rgba(34,190,110,0.9)', width: 3.2 });
-  const headRpx = bodyProportions.shoulderW * 0.17 * w;
-
-  // --- Presence bookkeeping for auto-return-to-start ---
-  if (okB) lastSeenAt = now;
-  const goneFor = now - lastSeenAt;
-  if (!returningHome) {
-    if (sessionActive && goneFor > LEAVE_DANCE_GRACE) {
-      // participant walked off mid-dance -> wrap up and go home
-      returnHome(false);
-    } else if (!sessionActive && lastSeenAt > 0 && goneFor > IDLE_EMPTY_GRACE) {
-      // nobody at the idle screen for a while -> back to the welcome page
-      returnHome(false);
+let camFrame=0;
+function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
+  if(sessionActive){
+    const remain=SESSION_LENGTH-(now-sessionStart);
+    if(remain<=0){ endSession(); }
+    else{ timerEl.textContent=Math.ceil(remain)+'s';
+      figure.rotation.y=0; // reset; revolve moves set it below
+      const pose=current3DPose(now);
+      // revolve → real 3D turn
+      if(Math.abs(lastRevolve)>0.02) figure.rotation.y = lastRevolve * 0.9;
+      apply3D(pose);
+      // throttle pose detection to every 2nd frame for perf
+      if((camFrame++ %2)===0) drawYou();
     }
   }
-
-  if (!sessionActive) {
-    // Idle: the figure copies your live movements — mirror-like, so it feels
-    // like it's interacting with you before the dance starts.
-    const mimic = mimicPoseFromTracked(named, now);
-    lastMimicPose = mimic;
-    const idleRetargeted = groundPose(retargetPose(mimic, currentAlign, bodyProportions));
-    drawStickLine(idleRetargeted, rect, { color: GUIDE_COLOR, width: 3.2, headR: headRpx, direct: true });
-    ctx.save();
-    ctx.textAlign = 'center';
-    const icx = w/2, icy = h * 0.18;
-    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 8;
-    ctx.fillStyle = 'rgba(255,255,255,0.96)';
-    ctx.font = '700 26px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('Tap to Dance', icx, icy);
-    ctx.fillStyle = 'rgba(255,210,120,0.95)';
-    ctx.font = '500 18px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('Tippen zum Tanzen', icx, icy + 30);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText('It copies you — tap to learn a dance', icx, icy + 60);
-    ctx.restore();
-  } else {
-    const remain = SESSION_LENGTH - (now - sessionStart);
-    if (remain <= 0) {
-      endSession();
-      showSatisfaction();
-    } else {
-      let movePose = currentMovePose(now);
-      // Smooth hand-off: for the first ~1.5s after tapping, blend from the
-      // pose the figure was mirroring into the dance teaching pose, so it
-      // flows out of "copying you" into "teaching" instead of snapping.
-      if (transitionStart !== null) {
-        const tf = (now - transitionStart) / TRANSITION_TIME;
-        if (tf >= 1) transitionStart = null;
-        else if (lastMimicPose) {
-          let f = tf < 0.5 ? 2*tf*tf : 1 - Math.pow(-2*tf+2, 2)/2;
-          movePose = lerpPose(lastMimicPose, movePose, f);
-        }
-      }
-      const retargeted = groundPose(retargetPose(movePose, currentAlign, bodyProportions));
-      drawStickLine(retargeted, rect, { color: GUIDE_COLOR, width: 3.2, headR: headRpx, direct: true });
-
-      // countdown, top-right of screen
-      ctx.save();
-      ctx.textAlign = 'right';
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 6;
-      ctx.fillStyle = remain < 10 ? 'rgba(255,120,120,0.95)' : 'rgba(255,255,255,0.85)';
-      ctx.font = '700 22px -apple-system, sans-serif';
-      ctx.fillText(Math.ceil(remain) + 's', w - 16, 46);
-      ctx.restore();
-
-      // Speak the instruction (female voice) instead of showing it on screen.
-      // The move's origin/tradition stays visible, top-left.
-      const mv = DANCE_MOVES[moveIdx];
-      if (moveIdx !== lastSpokenIdx) {
-        lastSpokenIdx = moveIdx;
-        speakInstruction(mv.text);
-      }
-      ctx.save();
-      ctx.textAlign = 'left';
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 8;
-      ctx.fillStyle = 'rgba(150,215,255,0.95)';
-      ctx.font = '600 18px -apple-system, "Segoe UI", sans-serif';
-      ctx.fillText(mv.dance, 18, 40);
-      ctx.restore();
-    }
-  }
-
-  if (!okB) {
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(w/2 - 130, h - 56, 260, 34);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = '600 13px -apple-system, sans-serif';
-    ctx.fillText('Step back — show your whole body', w/2, h - 34);
-    ctx.restore();
-  }
-
-  } catch (err) {
-    console.error('render frame error (skipped):', err);
-  }
-  requestAnimationFrame(renderLoop);
+  controls.update(); renderer.render(scene,camera);
 }
-
-// --- Satisfaction screen: the AI shows how good it felt to borrow a body ---
-// A happy little dance/stretch for ~10 seconds, then fades back to the start.
-let satisfyRunning = false, satisfyStart = 0;
-const SATISFY_HEADINGS = [
-  ['Ahh, that felt wonderful.', 'Thank you for lending me your body to dance.'],
-  ['What a joy to move again!', 'For a moment, I got to feel alive. Thank you.'],
-  ['That was beautiful.', 'Thank you for dancing with me.'],
-];
-function satisfiedPose(t) {
-  // gentle sway + arms rising in contentment, a soft bow at the end
-  const sway = Math.sin(t*1.6)*0.05;
-  const rise = Math.min(1, t*0.5);
-  return poseFrom({
-    left_wrist:{x:CXX-0.20-sway, y:0.24 + Math.sin(t*2)*0.05},
-    right_wrist:{x:CXX+0.20-sway, y:0.24 + Math.sin(t*2+1)*0.05},
-    left_elbow:{x:CXX-0.17-sway, y:0.34}, right_elbow:{x:CXX+0.17-sway, y:0.34},
-    nose:{x:CXX+sway*1.4, y:0.28 - rise*0.01},
-    left_hip:{x:CXX-0.065+sway, y:HIPY}, right_hip:{x:CXX+0.065+sway, y:HIPY},
-  });
-}
-function satisfyLoop() {
-  if (!satisfyRunning) return;
-  const w = satisfyCanvas.width, h = satisfyCanvas.height;
-  satisfyCtx.clearRect(0, 0, w, h);
-  const t = performance.now()/1000 - satisfyStart;
-  const pose = satisfiedPose(t);
-  const retargeted = retargetPose(pose, { cx: CXX, cy: HIPY }, DEFAULT_PROPORTIONS);
-  drawStickLine(retargeted, { x:0, y:0, w, h }, {
-    ctx: satisfyCtx, color: GUIDE_COLOR, width: 3.2,
-    headR: DEFAULT_PROPORTIONS.shoulderW*0.17*w, direct: true
-  });
-  requestAnimationFrame(satisfyLoop);
-}
-function showSatisfaction() {
-  if (returningHome) return;
-  returningHome = true;
-  const pick = SATISFY_HEADINGS[(Math.random()*SATISFY_HEADINGS.length)|0];
-  satisfyHeading.textContent = pick[0];
-  satisfySub.textContent = pick[1];
-  speakInstruction(pick[0] + ' ' + pick[1]);
-  resizeCanvas();
-  satisfyStart = performance.now()/1000;
-  satisfyRunning = true;
-  satisfyLoop();
-  fadeToScreen(stage, satisfyScreen);
-  // after 10 seconds, fade back to the very first page
-  setTimeout(() => {
-    satisfyRunning = false;
-    goToStart(satisfyScreen);
-  }, 10000);
-}
-
-// Return home from an interrupted session or empty idle screen.
-function returnHome() {
-  if (returningHome) return;
-  returningHome = true;
-  if (window.speechSynthesis) speechSynthesis.cancel();
-  sessionActive = false;
-  goToStart(stage);
-}
-
-// Fade whatever's showing back to the start screen and reset for the next
-// participant. The camera/model keep running; we just hide the stage.
-let sessionCount = 0;
-const REFRESH_AFTER_SESSIONS = 7;   // reload after this many dances (clears memory)
-
-function goToStart(fromEl) {
-  running = false;                 // pause the render loop
-  sessionActive = false;
-  // Safe self-refresh: after N completed dances, quietly reload while on the
-  // home page (nobody dancing) to clear any memory buildup before it can
-  // cause a slowdown or freeze mid-exhibition.
-  if (sessionCount >= REFRESH_AFTER_SESSIONS) {
-    adminReloading = true;         // skip the unload confirmation
-    fadeToScreen(fromEl, startScreen, () => setTimeout(() => location.reload(), 400));
-    return;
-  }
-  fadeToScreen(fromEl, startScreen, () => {
-    // reset controls visibility state; they re-show when Yes is pressed again
-    [filterToggle, partnerToggle, listenToggle, speedControl, fsToggle].forEach(el => el && el.classList.add('hidden'));
-    lastSeenAt = 0;
-    returningHome = false;
-  });
-}
-
-let cameraReady = false, modelReady = false;
-yesBtn.addEventListener('click', async () => {
-  try {
-    fadeToScreen(startScreen, stage);
-    resizeCanvas();
-
-    if (!cameraReady) {
-      setStatus('Starting camera…', 'loading');
-      await setupCamera();
-      cameraReady = true;
-    }
-    if (!modelReady) {
-      setStatus('Loading model…', 'loading');
-      await loadModel();
-      modelReady = true;
-    }
-
-    setStatus('Live', 'ready');
-    running = true;
-    returningHome = false;
-    lastSeenAt = performance.now() / 1000; // grace before empty-timeout kicks in
-    filterToggle.classList.remove('hidden');
-    partnerToggle.classList.remove('hidden');
-    listenToggle.classList.remove('hidden');
-    speedControl.classList.remove('hidden');
-    fsToggle.classList.remove('hidden');
-    filterToggle.textContent = FILTER_LABELS[faceFilterMode];
-    renderLoop();
-  } catch (err) {
-    const msg = (err && (err.message || err.name)) ? (err.name + ': ' + err.message) : String(err);
-    setStatus(msg, 'error');
-    console.error(err);
-  }
-});
-
-// --- No: no camera needed, just a friendly white figure waving goodbye ---
-let byeRunning = false;
-function byeLoop() {
-  if (!byeRunning) return;
-  const w = byeCanvas.width, h = byeCanvas.height;
-  byeCtx.clearRect(0, 0, w, h);
-  const t = performance.now() / 1000;
-  const pose = poseFrom(M.wave(t * 0.6));
-  const retargeted = retargetPose(pose, { cx: CXX, cy: HIPY }, DEFAULT_PROPORTIONS);
-  drawStickLine(retargeted, { x: 0, y: 0, w, h }, {
-    ctx: byeCtx, color: GUIDE_COLOR, width: 3.2, headR: DEFAULT_PROPORTIONS.shoulderW*0.17*w,
-    direct: true
-  });
-  requestAnimationFrame(byeLoop);
-}
-
-noBtn.addEventListener('click', () => {
-  fadeToScreen(startScreen, byeScreen);
-  resizeCanvas();
-  byeRunning = true;
-  byeLoop();
-  speakInstruction('Bye bye, have a nice day!');
-  // wave goodbye, then loop back to the welcome screen for the next person
-  setTimeout(() => {
-    byeRunning = false;
-    fadeToScreen(byeScreen, startScreen);
-  }, 5000);
-});
+loop();
 </script>
-
 </body>
 </html>
