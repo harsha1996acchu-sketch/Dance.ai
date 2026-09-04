@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI + Bodies — 3D Dance Mirror</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden;
+    font-family: -apple-system, "Segoe UI", sans-serif; color: #fff; }
+  #app { position: fixed; inset: 0; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); visibility: hidden; }
+  #camCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+  #greenCanvas { position: absolute; inset: 0; width:100%; height:100%; z-index: 4; pointer-events: none; }
+  #three { position: absolute; inset: 0; z-index: 3; }
+  /* dim overlay + subtle spotlight when dancing */
+  #dim { position: absolute; inset: 0; width:100%; height:100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }
+  #dim.on { opacity: 1; }
+
+  .brand { position: absolute; top: 22px; left: 26px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; z-index: 6; }
+  #tapHint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 6;
+    font-size: 15px; color: #ddd; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 999px; }
+  #tapHint.hidden { display: none; }
+  #handHint { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); z-index: 7;
+    font-size: 18px; font-weight: 600; color: #fff; background: rgba(20,80,40,0.72);
+    padding: 12px 22px; border-radius: 999px; }
+  #handHint.hidden { display: none; }
+  #tapToDance { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); z-index: 8;
+    -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.1);
+    color: #fff; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; padding: 18px 48px;
+    border-radius: 999px; cursor: pointer; backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
+  #tapToDance:hover { background: rgba(255,255,255,0.2); }
+  #tapToDance.hidden { display: none; }
+  #langPick { display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 20px; }
+  .langBtn { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.3); background: transparent;
+    color: #fff; font-size: 14px; font-weight: 600; padding: 8px 18px; border-radius: 999px; cursor: pointer; }
+  .langBtn.on { background: rgba(90,200,120,0.85); border-color: rgba(120,230,150,0.9); color: #06210f; }
+  #langCorner { position: absolute; bottom: 22px; left: 22px; z-index: 9; display: flex; gap: 6px; }
+  #langCorner .langBtn { padding: 8px 14px; font-size: 13px; backdrop-filter: blur(8px); background: rgba(255,255,255,0.08); }
+  #langCorner .langBtn.on { background: rgba(90,200,120,0.85); }
+  #guideText { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 6; width: 90%; }
+  #gName { font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; }
+  #gRegion { font-size: 14px; color: #7fd7ff; margin-top: 3px; }
+  #gText { font-size: clamp(13px, 1.4vw, 16px); color: #eee; margin-top: 6px; }
+  #timer { position: absolute; top: 20px; right: 20px; z-index: 6; font-size: 22px; font-weight: 700; }
+  #camLabel { position: absolute; top: 16px; left: 16px; z-index: 6; font-size: 13px; color: #cfc; letter-spacing:0.08em; }
+
+  /* consent / start screen */
+  #startScreen, #byeScreen { position: absolute; inset: 0; z-index: 20; background: #050505;
+    display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 32px; }
+  .startBrand { position: absolute; top: 28px; left: 34px; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+  .askText { font-size: clamp(34px, 6vw, 66px); font-weight: 700; max-width: 1000px; line-height: 1.2; }
+  .subText { font-size: 16px; color: #999; max-width: 440px; line-height: 1.5; margin: 22px 0 34px; }
+  #consentBtns { display: flex; gap: 14px; }
+  .consentBtn { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.3); background: transparent;
+    color: #fff; font-size: 17px; font-weight: 600; padding: 14px 40px; border-radius: 10px; cursor: pointer; }
+  .consentBtn.yes { background: #2a7d52; border-color: #2a7d52; }
+  #byeScreen h1 { font-size: clamp(28px,4vw,44px); font-weight: 700; }
+
+  #controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 6;
+    display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15); padding: 9px 13px; border-radius: 999px; backdrop-filter: blur(8px); }
+  #controls.hidden, .hidden { display: none !important; }
+  button.ctl { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  button.ctl.on { background: #2a7d52; border-color: #2a7d52; }
+  #speedWrap { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  #speedSlider { width: 80px; accent-color: #ffc94a; }
+  #status { position: absolute; bottom: 62px; left: 50%; transform: translateX(-50%); z-index: 50; font-size: 14px; color:#aaa; text-align:center; max-width:90%; }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="camCanvas"></canvas>
+  <canvas id="dim"></canvas>
+  <canvas id="greenCanvas"></canvas>
+  <div id="three"></div>
+  <div class="brand">AI + Bodies</div>
+  <div id="guideText" class="hidden">
+    <div id="gName">—</div><div id="gRegion"></div><div id="gText"></div>
+  </div>
+  <div id="timer" class="hidden"></div>
+  <div id="tapHint">Tap “Dance” to begin — the figure is copying you</div>
+  <div id="handHint" class="hidden">🙋 Raise your hand so the line can find you</div>
+  <button id="tapToDance" class="hidden">Tap to Dance</button>
+</div>
+
+<div id="langCorner">
+  <button id="langEN" class="langBtn on">EN</button>
+  <button id="langDE" class="langBtn">DE</button>
+</div>
+<div id="controls" class="hidden">
+  <span style="opacity:0.6;font-size:11px;">Figure:</span>
+  <button id="posL" class="ctl">Left</button>
+  <button id="posC" class="ctl">Center</button>
+  <button id="posR" class="ctl on">Right</button>
+  <button id="refreshBtn" class="ctl">↻ Refresh</button>
+  <button id="musicBtn" class="ctl on">♪ Music</button>
+  <button id="listenBtn" class="ctl">🎤 Listen</button>
+  <div id="speedWrap"><span>Speed</span><input id="speedSlider" type="range" min="0.3" max="2.0" step="0.1" value="1"><span id="speedVal">1.0×</span></div>
+  <button id="fsBtn" class="ctl">⛶ Fullscreen</button>
+</div>
+<div id="status"></div>
+
+<div id="startScreen">
+  <div class="startBrand">AI + Bodies</div>
+  <p class="askText">Can I borrow your body for a dance?</p>
+  <p class="subText">Your face is never shown or recorded. Everything runs offline, right here on this device.</p>
+  <div id="consentBtns">
+    <button id="yesBtn" class="consentBtn yes">Yes</button>
+    <button id="noBtn" class="consentBtn no">No</button>
+  </div>
+</div>
+<div id="byeScreen" class="hidden"><h1>Thank you for participating</h1></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script>
+// Fallback watchdog: if the 3D module hasn't signaled ready in 8s, tell the user.
+window.__moduleReady = false;
+setTimeout(function(){
+  if (!window.__moduleReady) {
+    var s = document.getElementById('status');
+    if (s) { s.classList.remove('hidden'); s.style.color = '#ffcc66';
+      s.textContent = '3D engine did not load — needs internet for Three.js. Check connection or use the 2D version.'; }
+  }
+}, 8000);
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+window.__moduleReady = true;
+(function(){ var s=document.getElementById('status'); if(s){ s.textContent='Ready — tap Yes to begin'; s.style.color='#8f8'; } })();
+
+// Show any error on screen instead of failing silently.
+window.addEventListener('error', (e) => {
+  const s = document.getElementById('status');
+  if (s) { s.classList.remove('hidden'); s.style.color = '#ff8888'; s.textContent = 'Error: ' + (e.message || e.error); }
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const s = document.getElementById('status');
+  if (s) { s.classList.remove('hidden'); s.style.color = '#ff8888'; s.textContent = 'Load error: ' + (e.reason && e.reason.message || e.reason); }
+});
+
+/* ============================================================
+   PART 1 — The existing 2D dance engine (reused unchanged).
+   ============================================================ */
+const CXX = 0.5, SHY = 0.4, HIPY = 0.62;
+const GUIDE_JOINTS = ['nose','left_shoulder','right_shoulder','left_elbow','right_elbow',
+  'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+function basePose(over) {
+  const p = {
+    nose:           { x: CXX,        y: 0.28 },
+    left_shoulder:  { x: CXX-0.075,  y: SHY },
+    right_shoulder: { x: CXX+0.075,  y: SHY },
+    left_elbow:     { x: CXX-0.15,   y: SHY+0.10 },
+    right_elbow:    { x: CXX+0.15,   y: SHY+0.10 },
+    left_wrist:     { x: CXX-0.17,   y: SHY+0.20 },
+    right_wrist:    { x: CXX+0.17,   y: SHY+0.20 },
+    left_hip:       { x: CXX-0.065,  y: HIPY },
+    right_hip:      { x: CXX+0.065,  y: HIPY },
+    left_knee:      { x: CXX-0.08,   y: HIPY+0.16 },
+    right_knee:     { x: CXX+0.08,   y: HIPY+0.16 },
+    left_ankle:     { x: CXX-0.085,  y: HIPY+0.32 },
+    right_ankle:    { x: CXX+0.085,  y: HIPY+0.32 },
+  };
+  if (over) for (const k in over) p[k] = over[k];
+  return p;
+}
+const POSES = {
+  neutral: () => basePose(),
+
+  armsUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.12, y: SHY-0.22 },
+    right_wrist: { x: CXX+0.12, y: SHY-0.22 },
+  }),
+
+  armsOutT: () => basePose({
+    left_elbow:  { x: CXX-0.17, y: SHY },
+    right_elbow: { x: CXX+0.17, y: SHY },
+    left_wrist:  { x: CXX-0.27, y: SHY },
+    right_wrist: { x: CXX+0.27, y: SHY },
+  }),
+
+  leftUp: () => basePose({
+    left_elbow:  { x: CXX-0.13, y: SHY-0.08 },
+    left_wrist:  { x: CXX-0.11, y: SHY-0.23 },
+    right_elbow: { x: CXX+0.15, y: SHY+0.12 },
+    right_wrist: { x: CXX+0.16, y: SHY+0.24 },
+  }),
+
+  rightUp: () => basePose({
+    right_elbow: { x: CXX+0.13, y: SHY-0.08 },
+    right_wrist: { x: CXX+0.11, y: SHY-0.23 },
+    left_elbow:  { x: CXX-0.15, y: SHY+0.12 },
+    left_wrist:  { x: CXX-0.16, y: SHY+0.24 },
+  }),
+
+  handsHips: () => basePose({
+    left_elbow:  { x: CXX-0.18, y: SHY+0.08 },
+    right_elbow: { x: CXX+0.18, y: SHY+0.08 },
+    left_wrist:  { x: CXX-0.09, y: HIPY-0.02 },
+    right_wrist: { x: CXX+0.09, y: HIPY-0.02 },
+  }),
+
+  prayer: () => basePose({
+    left_elbow:  { x: CXX-0.12, y: SHY+0.10 },
+    right_elbow: { x: CXX+0.12, y: SHY+0.10 },
+    left_wrist:  { x: CXX-0.01, y: SHY+0.08 },
+    right_wrist: { x: CXX+0.01, y: SHY+0.08 },
+  }),
+
+  leanLeft: () => basePose({
+    nose:          { x: CXX-0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.13, y: SHY+0.01 },
+    right_shoulder:{ x: CXX+0.05, y: SHY-0.01 },
+    left_elbow:    { x: CXX-0.20, y: SHY+0.02 },
+    left_wrist:    { x: CXX-0.28, y: SHY-0.04 },
+    right_elbow:   { x: CXX+0.10, y: SHY-0.06 },
+    right_wrist:   { x: CXX+0.14, y: SHY-0.18 },
+    left_knee:     { x: CXX-0.12, y: HIPY+0.16 },
+  }),
+
+  leanRight: () => basePose({
+    nose:          { x: CXX+0.06, y: 0.29 },
+    left_shoulder: { x: CXX-0.05, y: SHY-0.01 },
+    right_shoulder:{ x: CXX+0.13, y: SHY+0.01 },
+    right_elbow:   { x: CXX+0.20, y: SHY+0.02 },
+    right_wrist:   { x: CXX+0.28, y: SHY-0.04 },
+    left_elbow:    { x: CXX-0.10, y: SHY-0.06 },
+    left_wrist:    { x: CXX-0.14, y: SHY-0.18 },
+    right_knee:    { x: CXX+0.12, y: HIPY+0.16 },
+  }),
+
+  clapCenter: () => basePose({
+    left_elbow:  { x: CXX-0.10, y: SHY+0.04 },
+    right_elbow: { x: CXX+0.10, y: SHY+0.04 },
+    left_wrist:  { x: CXX-0.02, y: SHY+0.02 },
+    right_wrist: { x: CXX+0.02, y: SHY+0.02 },
+  }),
+
+  oneKneeUp: () => basePose({
+    right_knee:  { x: CXX+0.06, y: HIPY+0.06 },
+    right_ankle: { x: CXX+0.08, y: HIPY+0.20 },
+    left_elbow:  { x: CXX-0.15, y: SHY-0.06 },
+    left_wrist:  { x: CXX-0.14, y: SHY-0.20 },
+  }),
+};
+const M = {
+  // ---- upper body ----
+  vibrate:(t,a=0.016,s=24)=>{const v=Math.sin(t*s)*a;return{left_shoulder:{x:CXX-0.09+v,y:SHY},right_shoulder:{x:CXX+0.09-v,y:SHY},left_elbow:{x:CXX-0.15+v,y:SHY+0.10},right_elbow:{x:CXX+0.15-v,y:SHY+0.10},left_wrist:{x:CXX-0.17+v,y:SHY+0.20},right_wrist:{x:CXX+0.17-v,y:SHY+0.20}};},
+  headCircle:(t,r=0.05)=>{const cx=Math.cos(t*4)*r,cy=Math.sin(t*4)*r*0.8;return{nose:{x:CXX+cx,y:0.28+cy}};},
+  headShake:(t)=>{const hx=Math.sin(t*10)*0.05;return{nose:{x:CXX+hx,y:0.28}};},
+  headNod:(t)=>{const h=Math.sin(t*4.5)*0.06;return{nose:{x:CXX,y:0.28-Math.abs(h)*0.5}};},
+  torsoArch:(t)=>{const a=Math.sin(t*3);return{nose:{x:CXX,y:0.28+a*0.08},left_shoulder:{x:CXX-0.09,y:SHY+a*0.06},right_shoulder:{x:CXX+0.09,y:SHY+a*0.06},left_elbow:{x:CXX-0.16,y:SHY+0.10+a*0.06},right_elbow:{x:CXX+0.16,y:SHY+0.10+a*0.06}};},
+  shift:(t,a=0.07,s=1.8)=>({__shift:Math.sin(t*s)*a}),
+  twist:(t)=>{const tw=Math.sin(t*4)*0.07;return{left_shoulder:{x:CXX-0.09-tw,y:SHY},right_shoulder:{x:CXX+0.09-tw,y:SHY},left_hip:{x:CXX-0.08+tw,y:HIPY},right_hip:{x:CXX+0.08+tw,y:HIPY}};},
+  armsUp:(t)=>{const b=Math.sin(t*2.5)*0.04;return{left_wrist:{x:CXX-0.12,y:SHY-0.22-b},right_wrist:{x:CXX+0.12,y:SHY-0.22-b},left_elbow:{x:CXX-0.13,y:SHY-0.06},right_elbow:{x:CXX+0.13,y:SHY-0.06}};},
+  armsOpen:(t)=>{const b=Math.sin(t*2)*0.04;return{nose:{x:CXX,y:0.26-b},left_wrist:{x:CXX-0.28,y:SHY-0.06-b},right_wrist:{x:CXX+0.28,y:SHY-0.06-b},left_elbow:{x:CXX-0.17,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY-0.02}};},
+  armCircles:(t)=>({left_wrist:{x:CXX-0.15+Math.cos(t*4.5)*0.08,y:SHY+0.05+Math.sin(t*4.5)*0.13},right_wrist:{x:CXX+0.15+Math.cos(t*4.5+Math.PI)*0.08,y:SHY+0.05+Math.sin(t*4.5+Math.PI)*0.13}}),
+  clap:(t,s=7)=>{const c=Math.abs(Math.sin(t*s))*0.14;return{left_wrist:{x:CXX-0.02-c,y:SHY+0.04},right_wrist:{x:CXX+0.02+c,y:SHY+0.04},left_elbow:{x:CXX-0.10-c*0.5,y:SHY+0.06},right_elbow:{x:CXX+0.10+c*0.5,y:SHY+0.06}};},
+  pullChest:(t)=>{const p=(Math.sin(t*3.5)*0.5+0.5);return{left_wrist:{x:CXX-0.03,y:SHY+0.08},right_wrist:{x:CXX+0.03,y:SHY+0.08},left_elbow:{x:CXX-0.10-p*0.08,y:SHY+0.08},right_elbow:{x:CXX+0.10+p*0.08,y:SHY+0.08}};},
+  wave:(t)=>{const w=Math.sin(t*4)*0.06;return{left_wrist:{x:CXX-0.20,y:SHY+Math.sin(t*5)*0.11},right_wrist:{x:CXX+0.20,y:SHY+Math.sin(t*5+1)*0.11},nose:{x:CXX+w,y:0.28}};},
+  reach:(t)=>{const p=(Math.sin(t*3)*0.5+0.5);return{left_wrist:{x:CXX-0.13,y:SHY-p*0.24},right_wrist:{x:CXX+0.13,y:SHY-p*0.24},left_elbow:{x:CXX-0.13,y:SHY-p*0.09},right_elbow:{x:CXX+0.13,y:SHY-p*0.09},left_knee:{x:CXX-0.09,y:HIPY+0.14-p*0.04},right_knee:{x:CXX+0.09,y:HIPY+0.14-p*0.04}};},
+  oneArmUp:(t)=>{const s=Math.sin(t*3.5)*0.05;return{right_wrist:{x:CXX+0.12,y:SHY-0.24+s},right_elbow:{x:CXX+0.14,y:SHY-0.06},left_wrist:{x:CXX-0.16,y:SHY+0.22},left_elbow:{x:CXX-0.15,y:SHY+0.10}};},
+  overhead:(t)=>{const s=Math.sin(t*5)*0.12;return{left_wrist:{x:CXX-0.06+s,y:SHY-0.26},right_wrist:{x:CXX+0.06+s,y:SHY-0.26},left_elbow:{x:CXX-0.12,y:SHY-0.10},right_elbow:{x:CXX+0.12,y:SHY-0.10}};},
+  still:(t)=>({nose:{x:CXX,y:0.28+Math.sin(t*1.2)*0.006}}),
+  sway:(t,a=0.07)=>({__shift:Math.sin(t*2.2)*a}),
+  // revolve: turn the whole body to face left, then right, continuously
+  revolve:(t,s=1.0)=>({__revolve:Math.sin(t*s)}),
+  // revolve while doing something with the arms open
+  revolveOpen:(t,s=1.0)=>({__revolve:Math.sin(t*s),left_wrist:{x:CXX-0.26,y:SHY-0.02},right_wrist:{x:CXX+0.26,y:SHY-0.02},left_elbow:{x:CXX-0.16,y:SHY},right_elbow:{x:CXX+0.16,y:SHY}}),
+
+  // ---- BOLD LEG MOTION ----
+  // deep knee bend: whole body drops, knees splay
+  kneeBend:(t)=>{const b=(Math.sin(t*3)*0.5+0.5)*0.14;return{nose:{x:CXX,y:0.28+b},left_shoulder:{x:CXX-0.09,y:SHY+b},right_shoulder:{x:CXX+0.09,y:SHY+b},left_hip:{x:CXX-0.08,y:HIPY+b},right_hip:{x:CXX+0.08,y:HIPY+b},left_knee:{x:CXX-0.15,y:HIPY+0.14+b*0.5},right_knee:{x:CXX+0.15,y:HIPY+0.14+b*0.5},left_ankle:{x:CXX-0.10,y:HIPY+0.32},right_ankle:{x:CXX+0.10,y:HIPY+0.32}};},
+  // high knee lift, alternating — big visible leg raise
+  kneeLift:(t,s=4)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_knee:{x:CXX-0.09+L*0.03,y:HIPY+0.16-L*0.16},left_ankle:{x:CXX-0.10+L*0.05,y:HIPY+0.32-L*0.22},
+           right_knee:{x:CXX+0.09+R*0.03,y:HIPY+0.16-R*0.16},right_ankle:{x:CXX+0.10+R*0.05,y:HIPY+0.32-R*0.22},
+           nose:{x:CXX,y:0.28-Math.abs(p)*0.02}};},
+  // forward kick, alternating — leg extends out
+  kick:(t,s=3.5)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_knee:{x:CXX-0.09-L*0.05,y:HIPY+0.16-L*0.10},left_ankle:{x:CXX-0.10-L*0.18,y:HIPY+0.32-L*0.24},
+           right_knee:{x:CXX+0.09+R*0.05,y:HIPY+0.16-R*0.10},right_ankle:{x:CXX+0.10+R*0.18,y:HIPY+0.32-R*0.24}};},
+  // jump: whole body lifts, legs tuck
+  jump:(t,s=3)=>{const p=Math.max(0,Math.sin(t*s)),lift=p*0.10;
+    return{__lift:lift,
+           left_knee:{x:CXX-0.10,y:HIPY+0.16-p*0.05},right_knee:{x:CXX+0.10,y:HIPY+0.16-p*0.05},
+           left_ankle:{x:CXX-0.11,y:HIPY+0.32-p*0.09},right_ankle:{x:CXX+0.11,y:HIPY+0.32-p*0.09},
+           left_wrist:{x:CXX-0.16,y:SHY+0.18-p*0.30},right_wrist:{x:CXX+0.16,y:SHY+0.18-p*0.30}};},
+  // stomp: hard alternating foot strikes with arm swing
+  stomp:(t,s=4)=>{const p=Math.sin(t*s),L=Math.max(0,p),R=Math.max(0,-p);
+    return{left_wrist:{x:CXX-0.18-p*0.08,y:SHY+0.05+p*0.12},right_wrist:{x:CXX+0.18+p*0.08,y:SHY+0.05-p*0.12},
+           left_knee:{x:CXX-0.09,y:HIPY+0.16-L*0.12},left_ankle:{x:CXX-0.10,y:HIPY+0.32-L*0.16},
+           right_knee:{x:CXX+0.09,y:HIPY+0.16-R*0.12},right_ankle:{x:CXX+0.10,y:HIPY+0.32-R*0.16}};},
+  // wide leg step side to side
+  sideStep:(t,s=2.5)=>{const p=Math.sin(t*s);
+    return{left_knee:{x:CXX-0.08+p*0.04,y:HIPY+0.16},left_ankle:{x:CXX-0.10+p*0.06,y:HIPY+0.32},
+           right_knee:{x:CXX+0.08+p*0.04,y:HIPY+0.16},right_ankle:{x:CXX+0.10+p*0.06,y:HIPY+0.32},
+           left_hip:{x:CXX-0.065+p*0.025,y:HIPY},right_hip:{x:CXX+0.065+p*0.025,y:HIPY}};},
+  // hip strike with supporting leg lift
+  hipStrike:(t)=>{const s=Math.sin(t*5),hip=s*0.06,lift=Math.max(0,s);
+    return{left_hip:{x:CXX-0.08+hip,y:HIPY},right_hip:{x:CXX+0.08+hip,y:HIPY},
+           right_knee:{x:CXX+0.09+hip,y:HIPY+0.16-lift*0.12},right_ankle:{x:CXX+0.10+hip,y:HIPY+0.32-lift*0.16},
+           left_knee:{x:CXX-0.09+hip,y:HIPY+0.16}};},
+  // spin with a lifted leg
+  spin:(t,s=6)=>{const w=Math.abs(Math.sin(t*s)),sc=0.15+0.85*w,lift=(1-w)*0.10;
+    return{left_shoulder:{x:CXX-0.09*sc,y:SHY},right_shoulder:{x:CXX+0.09*sc,y:SHY},
+           left_wrist:{x:CXX-0.22*sc,y:SHY+0.02},right_wrist:{x:CXX+0.22*sc,y:SHY+0.02},
+           left_hip:{x:CXX-0.08*sc,y:HIPY},right_hip:{x:CXX+0.08*sc,y:HIPY},
+           right_knee:{x:CXX+0.09*sc,y:HIPY+0.16-lift},right_ankle:{x:CXX+0.10*sc,y:HIPY+0.32-lift*1.6}};},
+};
+let lastRevolveCapture = 0;
+function poseFrom(res){
+  const shift = res.__shift || 0;
+  const lift = res.__lift || 0;
+  const revolve = res.__revolve || 0; // -1 faces left, +1 faces right, 0 front
+  lastRevolveCapture = revolve;
+  const over = {};
+  for(const k in res){ if(k==='__shift'||k==='__lift'||k==='__revolve') continue; over[k]=res[k]; }
+  const p = basePose(over);
+  if(shift || lift){ for(const k in p){ p[k]={x:p[k].x+shift,y:p[k].y-lift}; } }
+  if(revolve){
+    // Simulate a body turning in place: horizontally squash toward center
+    // (like foreshortening), and slide the whole figure slightly in the
+    // turn direction so it reads as revolving, not just shrinking.
+    const squash = 1 - 0.72 * Math.abs(revolve); // width factor at full turn
+    const slide = 0.05 * revolve;                // small drift in turn direction
+    for(const k in p){
+      p[k] = { x: CXX + (p[k].x - CXX) * squash + slide, y: p[k].y };
+    }
+  }
+  return p;
+}
+function lerpPose(a, b, tt) {
+  const out = {};
+  for (const k of GUIDE_JOINTS) {
+    const ja = a[k], jb = b[k];
+    if (ja && jb) {
+      out[k] = { x: ja.x + (jb.x - ja.x) * tt, y: ja.y + (jb.y - ja.y) * tt };
+    } else if (jb) {
+      out[k] = { x: jb.x, y: jb.y };
+    } else if (ja) {
+      out[k] = { x: ja.x, y: ja.y };
+    }
+  }
+  return out;
+}
+const KP = {
+  neutral:   {},
+  armsUp:    {left_wrist:{x:CXX-0.24,y:0.16},right_wrist:{x:CXX+0.24,y:0.16},left_elbow:{x:CXX-0.17,y:0.29},right_elbow:{x:CXX+0.17,y:0.29},left_knee:{x:CXX-0.09,y:0.79},right_knee:{x:CXX+0.09,y:0.79},left_ankle:{x:CXX-0.10,y:0.94},right_ankle:{x:CXX+0.10,y:0.94}},
+  tPose:     {left_wrist:{x:CXX-0.29,y:SHY},right_wrist:{x:CXX+0.29,y:SHY},left_elbow:{x:CXX-0.17,y:SHY},right_elbow:{x:CXX+0.17,y:SHY},left_knee:{x:CXX-0.11,y:0.78},right_knee:{x:CXX+0.11,y:0.78},left_ankle:{x:CXX-0.13,y:0.94},right_ankle:{x:CXX+0.13,y:0.94}},
+  wingsHigh: {left_wrist:{x:CXX-0.30,y:0.32},right_wrist:{x:CXX+0.30,y:0.32},left_elbow:{x:CXX-0.18,y:0.37},right_elbow:{x:CXX+0.18,y:0.37},left_knee:{x:CXX-0.12,y:0.77},right_knee:{x:CXX+0.12,y:0.77},left_ankle:{x:CXX-0.14,y:0.94},right_ankle:{x:CXX+0.14,y:0.94}},
+  prayerHigh:{left_wrist:{x:CXX-0.015,y:0.17},right_wrist:{x:CXX+0.015,y:0.17},left_elbow:{x:CXX-0.10,y:0.30},right_elbow:{x:CXX+0.10,y:0.30},left_knee:{x:CXX-0.10,y:0.79},right_knee:{x:CXX+0.10,y:0.79},left_ankle:{x:CXX-0.06,y:0.94},right_ankle:{x:CXX+0.06,y:0.94}},
+  diagL:     {left_wrist:{x:CXX-0.24,y:0.18},right_wrist:{x:CXX+0.20,y:0.64},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.14,y:0.52},nose:{x:CXX-0.03,y:0.28},left_knee:{x:CXX-0.13,y:0.78},left_ankle:{x:CXX-0.17,y:0.94}},
+  diagR:     {right_wrist:{x:CXX+0.24,y:0.18},left_wrist:{x:CXX-0.20,y:0.64},right_elbow:{x:CXX+0.16,y:0.30},left_elbow:{x:CXX-0.14,y:0.52},nose:{x:CXX+0.03,y:0.28},right_knee:{x:CXX+0.13,y:0.78},right_ankle:{x:CXX+0.17,y:0.94}},
+  reachL:    {left_wrist:{x:CXX-0.31,y:0.30},right_wrist:{x:CXX-0.16,y:0.38},left_elbow:{x:CXX-0.20,y:0.36},right_elbow:{x:CXX-0.04,y:0.44},nose:{x:CXX-0.04,y:0.29},left_hip:{x:CXX-0.09,y:HIPY},left_knee:{x:CXX-0.15,y:0.78},left_ankle:{x:CXX-0.19,y:0.94}},
+  reachR:    {right_wrist:{x:CXX+0.31,y:0.30},left_wrist:{x:CXX+0.16,y:0.38},right_elbow:{x:CXX+0.20,y:0.36},left_elbow:{x:CXX+0.04,y:0.44},nose:{x:CXX+0.04,y:0.29},right_hip:{x:CXX+0.09,y:HIPY},right_knee:{x:CXX+0.15,y:0.78},right_ankle:{x:CXX+0.19,y:0.94}},
+  prayer:    {left_wrist:{x:CXX-0.015,y:0.46},right_wrist:{x:CXX+0.015,y:0.46},left_elbow:{x:CXX-0.12,y:0.49},right_elbow:{x:CXX+0.12,y:0.49},left_knee:{x:CXX-0.12,y:0.78},right_knee:{x:CXX+0.12,y:0.78},left_ankle:{x:CXX-0.08,y:0.94},right_ankle:{x:CXX+0.08,y:0.94}},
+  hipsHands: {left_wrist:{x:CXX-0.10,y:0.60},right_wrist:{x:CXX+0.10,y:0.60},left_elbow:{x:CXX-0.18,y:0.50},right_elbow:{x:CXX+0.18,y:0.50},left_knee:{x:CXX-0.13,y:0.78},right_knee:{x:CXX+0.13,y:0.78},left_ankle:{x:CXX-0.15,y:0.94},right_ankle:{x:CXX+0.15,y:0.94}},
+  clapFront: {left_wrist:{x:CXX-0.01,y:0.42},right_wrist:{x:CXX+0.01,y:0.42},left_elbow:{x:CXX-0.14,y:0.46},right_elbow:{x:CXX+0.14,y:0.46},left_knee:{x:CXX-0.10,y:0.79},right_knee:{x:CXX+0.10,y:0.79},left_ankle:{x:CXX-0.08,y:0.94},right_ankle:{x:CXX+0.08,y:0.94}},
+  sweepLowL: {left_wrist:{x:CXX-0.27,y:0.60},right_wrist:{x:CXX-0.15,y:0.66},left_elbow:{x:CXX-0.17,y:0.52},right_elbow:{x:CXX-0.02,y:0.56},nose:{x:CXX-0.03,y:0.29}},
+  sweepLowR: {right_wrist:{x:CXX+0.27,y:0.60},left_wrist:{x:CXX+0.15,y:0.66},right_elbow:{x:CXX+0.17,y:0.52},left_elbow:{x:CXX+0.02,y:0.56},nose:{x:CXX+0.03,y:0.29}},
+  overheadL: {left_wrist:{x:CXX-0.20,y:0.19},right_wrist:{x:CXX-0.04,y:0.16},left_elbow:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.06,y:0.28},nose:{x:CXX-0.04,y:0.285}},
+  overheadR: {right_wrist:{x:CXX+0.20,y:0.19},left_wrist:{x:CXX+0.04,y:0.16},right_elbow:{x:CXX+0.16,y:0.30},left_elbow:{x:CXX-0.06,y:0.28},nose:{x:CXX+0.04,y:0.285}},
+  snapHighR: {right_wrist:{x:CXX+0.22,y:0.20},right_elbow:{x:CXX+0.15,y:0.31},left_wrist:{x:CXX-0.10,y:0.58},left_elbow:{x:CXX-0.16,y:0.49}},
+  snapHighL: {left_wrist:{x:CXX-0.22,y:0.20},left_elbow:{x:CXX-0.15,y:0.31},right_wrist:{x:CXX+0.10,y:0.58},right_elbow:{x:CXX+0.16,y:0.49}},
+  kneeL:     {left_knee:{x:CXX-0.06,y:0.65},left_ankle:{x:CXX-0.05,y:0.79},right_wrist:{x:CXX+0.20,y:0.24},right_elbow:{x:CXX+0.15,y:0.33},left_wrist:{x:CXX-0.12,y:0.52},left_elbow:{x:CXX-0.16,y:0.46}},
+  kneeR:     {right_knee:{x:CXX+0.06,y:0.65},right_ankle:{x:CXX+0.05,y:0.79},left_wrist:{x:CXX-0.20,y:0.24},left_elbow:{x:CXX-0.15,y:0.33},right_wrist:{x:CXX+0.12,y:0.52},right_elbow:{x:CXX+0.16,y:0.46}},
+  kickL:     {left_knee:{x:CXX-0.11,y:0.71},left_ankle:{x:CXX-0.23,y:0.74},left_wrist:{x:CXX-0.26,y:0.38},left_elbow:{x:CXX-0.16,y:0.40},right_wrist:{x:CXX+0.24,y:0.36},right_elbow:{x:CXX+0.15,y:0.39}},
+  kickR:     {right_knee:{x:CXX+0.11,y:0.71},right_ankle:{x:CXX+0.23,y:0.74},right_wrist:{x:CXX+0.26,y:0.38},right_elbow:{x:CXX+0.16,y:0.40},left_wrist:{x:CXX-0.24,y:0.36},left_elbow:{x:CXX-0.15,y:0.39}},
+  lungeL:    {left_ankle:{x:CXX-0.20,y:0.94},right_ankle:{x:CXX+0.14,y:0.94},left_knee:{x:CXX-0.17,y:0.79},right_knee:{x:CXX+0.11,y:0.80},left_hip:{x:CXX-0.10,y:HIPY+0.01},right_hip:{x:CXX+0.03,y:HIPY+0.01},left_wrist:{x:CXX-0.28,y:0.36},right_wrist:{x:CXX+0.16,y:0.30},left_elbow:{x:CXX-0.17,y:0.39},right_elbow:{x:CXX+0.12,y:0.36}},
+  lungeR:    {right_ankle:{x:CXX+0.20,y:0.94},left_ankle:{x:CXX-0.14,y:0.94},right_knee:{x:CXX+0.17,y:0.79},left_knee:{x:CXX-0.11,y:0.80},right_hip:{x:CXX+0.10,y:HIPY+0.01},left_hip:{x:CXX-0.03,y:HIPY+0.01},right_wrist:{x:CXX+0.28,y:0.36},left_wrist:{x:CXX-0.16,y:0.30},right_elbow:{x:CXX+0.17,y:0.39},left_elbow:{x:CXX-0.12,y:0.36}},
+  squat:     {left_hip:{x:CXX-0.07,y:HIPY+0.06},right_hip:{x:CXX+0.07,y:HIPY+0.06},left_knee:{x:CXX-0.14,y:0.80},right_knee:{x:CXX+0.14,y:0.80},left_ankle:{x:CXX-0.12,y:0.94},right_ankle:{x:CXX+0.12,y:0.94},left_wrist:{x:CXX-0.08,y:0.50},right_wrist:{x:CXX+0.08,y:0.50},left_elbow:{x:CXX-0.16,y:0.48},right_elbow:{x:CXX+0.16,y:0.48}},
+  bowFwd:    {nose:{x:CXX,y:0.40},left_shoulder:{x:CXX-0.075,y:0.46},right_shoulder:{x:CXX+0.075,y:0.46},left_wrist:{x:CXX-0.11,y:0.70},right_wrist:{x:CXX+0.11,y:0.70},left_elbow:{x:CXX-0.13,y:0.58},right_elbow:{x:CXX+0.13,y:0.58}},
+  chestOpen: {nose:{x:CXX,y:0.265},left_wrist:{x:CXX-0.17,y:0.33},right_wrist:{x:CXX+0.17,y:0.33},left_elbow:{x:CXX-0.19,y:0.42},right_elbow:{x:CXX+0.19,y:0.42}},
+  crossArms: {left_wrist:{x:CXX+0.08,y:0.46},right_wrist:{x:CXX-0.08,y:0.46},left_elbow:{x:CXX-0.10,y:0.48},right_elbow:{x:CXX+0.10,y:0.48}},
+  drumLow:   {left_wrist:{x:CXX-0.06,y:0.56},right_wrist:{x:CXX+0.06,y:0.56},left_elbow:{x:CXX-0.17,y:0.48},right_elbow:{x:CXX+0.17,y:0.48}},
+  stepWideL: {left_ankle:{x:CXX-0.18,y:0.94},left_knee:{x:CXX-0.14,y:0.79},nose:{x:CXX-0.03,y:0.28},left_wrist:{x:CXX-0.22,y:0.44},right_wrist:{x:CXX+0.14,y:0.50},left_elbow:{x:CXX-0.14,y:0.44},right_elbow:{x:CXX+0.15,y:0.47}},
+  stepWideR: {right_ankle:{x:CXX+0.18,y:0.94},right_knee:{x:CXX+0.14,y:0.79},nose:{x:CXX+0.03,y:0.28},right_wrist:{x:CXX+0.22,y:0.44},left_wrist:{x:CXX-0.14,y:0.50},right_elbow:{x:CXX+0.14,y:0.44},left_elbow:{x:CXX-0.15,y:0.47}},
+  halfSit:   {left_hip:{x:CXX-0.07,y:HIPY+0.05},right_hip:{x:CXX+0.07,y:HIPY+0.05},left_knee:{x:CXX-0.17,y:0.78},right_knee:{x:CXX+0.17,y:0.78},left_ankle:{x:CXX-0.07,y:0.94},right_ankle:{x:CXX+0.07,y:0.94},left_wrist:{x:CXX-0.09,y:0.56},right_wrist:{x:CXX+0.09,y:0.56},left_elbow:{x:CXX-0.18,y:0.50},right_elbow:{x:CXX+0.18,y:0.50}},
+  mudraFrontR:{right_wrist:{x:CXX+0.31,y:0.40},right_elbow:{x:CXX+0.17,y:0.40},left_wrist:{x:CXX-0.04,y:0.44},left_elbow:{x:CXX-0.13,y:0.47}},
+  mudraFrontL:{left_wrist:{x:CXX-0.31,y:0.40},left_elbow:{x:CXX-0.17,y:0.40},right_wrist:{x:CXX+0.04,y:0.44},right_elbow:{x:CXX+0.13,y:0.47}},
+  sideBendL: {nose:{x:CXX-0.08,y:0.305},left_shoulder:{x:CXX-0.11,y:0.415},right_shoulder:{x:CXX+0.04,y:0.395},left_wrist:{x:CXX-0.26,y:0.24},right_wrist:{x:CXX-0.08,y:0.18},left_elbow:{x:CXX-0.19,y:0.33},right_elbow:{x:CXX+0.03,y:0.29}},
+  sideBendR: {nose:{x:CXX+0.08,y:0.305},right_shoulder:{x:CXX+0.11,y:0.415},left_shoulder:{x:CXX-0.04,y:0.395},right_wrist:{x:CXX+0.26,y:0.24},left_wrist:{x:CXX+0.08,y:0.18},right_elbow:{x:CXX+0.19,y:0.33},left_elbow:{x:CXX-0.03,y:0.29}},
+  kickHighL: {left_knee:{x:CXX-0.14,y:0.68},left_ankle:{x:CXX-0.27,y:0.64},left_wrist:{x:CXX-0.28,y:0.34},left_elbow:{x:CXX-0.17,y:0.38},right_wrist:{x:CXX+0.22,y:0.40},right_elbow:{x:CXX+0.14,y:0.41}},
+  kickHighR: {right_knee:{x:CXX+0.14,y:0.68},right_ankle:{x:CXX+0.27,y:0.64},right_wrist:{x:CXX+0.28,y:0.34},right_elbow:{x:CXX+0.17,y:0.38},left_wrist:{x:CXX-0.22,y:0.40},left_elbow:{x:CXX-0.14,y:0.41}},
+  foldWaist: {left_wrist:{x:CXX-0.03,y:0.545},right_wrist:{x:CXX+0.03,y:0.545},left_elbow:{x:CXX-0.15,y:0.52},right_elbow:{x:CXX+0.15,y:0.52}},
+};
+const KFULL = {};
+for (const k in KP) KFULL[k] = poseFrom(KP[k]);
+function seq(names, step = 1.7) {
+  const TRAVEL_D = 1.4;                                    // dance-sec of smooth motion
+  const HOLD_D = 3.5 * Math.min(1.25, Math.max(0.85, step / 1.7)); // dance-sec of pause
+  const INTERVAL = TRAVEL_D + HOLD_D;
+  return (t) => {
+    const n = names.length;
+    const ph = (t / INTERVAL) % n;
+    const i = Math.floor(ph);
+    const f = (ph - i) * INTERVAL;
+    const a = KFULL[names[i]], b = KFULL[names[(i + 1) % n]];
+    // hold first, then travel at the end of the interval into the next pose
+    let m = f < HOLD_D ? 0 : (f - HOLD_D) / TRAVEL_D;
+    m = m < 0.5 ? 2*m*m : 1 - Math.pow(-2*m + 2, 2) / 2;
+    return lerpPose(a, b, m);
+  };
+}
+const DANCE_MOVES = [
+  // ---------------- INDIA ----------------
+  {dance:'Kathak · North India', name:'Chakkar — The Infinite Spin',
+   text:'Spin with arms out, eyes fixed on one point.', de:'Dreh dich mit ausgestreckten Armen, den Blick auf einen Punkt gerichtet.',
+   meaning:'Dissolving the self; devotion that never loses sight of the divine.',
+   fn:seq(['tPose','overheadL','armsUp','overheadR'],1.6)},
+  {dance:'Kathak · North India', name:'Tatkar — Conversation of Feet',
+   text:'Speak with your feet: heel, ball, heel — upper body calm.', de:'Sprich mit den Füßen: Ferse, Ballen, Ferse — Oberkörper ruhig.',
+   meaning:'A living dialogue with Tala, the cosmic pulse.',
+   fn:seq(['kneeL','neutral','kneeR','neutral'],1.1)},
+  {dance:'Kathak · North India', name:'Amad — The Arrival',
+   text:'Step with intention, chest open, then sweep arms wide.', de:'Schreite bewusst, Brust offen, dann breite die Arme weit aus.',
+   meaning:'Ordinary space becomes ritual space.',
+   fn:seq(['stepWideL','chestOpen','stepWideR','armsUp'],1.9)},
+  {dance:'Kathak · North India', name:'Tihaii — The Triple Landing',
+   text:'Repeat a phrase three times, land exactly on beat one, freeze.', de:'Wiederhole eine Phrase dreimal, lande genau auf Schlag eins, erstarre.',
+   meaning:'Three forces completing one cosmic cycle.',
+   fn:seq(['clapFront','snapHighR','clapFront','snapHighL','clapFront','armsUp'],1.2)},
+  {dance:'Odissi · Odisha', name:'Tribhanga — The Triple Bend',
+   text:'Hip out, torso counter-curves, head tilts — a flowing S.', de:'Hüfte raus, Oberkörper gegenbiegt, Kopf neigt sich — ein fließendes S.',
+   meaning:'The posture of Krishna: beauty, love, divine grace.',
+   fn:seq(['overheadL','reachL','overheadR','reachR'],2.2)},
+  {dance:'Odissi · Odisha', name:'Chauka — The Square',
+   text:'Feet wide, knees deep, spine vertical — a grounded square.', de:'Füße weit, Knie tief, Wirbelsäule gerade — ein geerdetes Quadrat.',
+   meaning:'The immovable masculine principle; the body as mandala.',
+   fn:seq(['squat','tPose','squat','wingsHigh'],2.0)},
+  {dance:'Odissi · Odisha', name:'Chali — The Sacred Walk',
+   text:'Walk with a gentle continuous hip sway, arms in slow arcs.', de:'Geh mit sanftem, stetigem Hüftschwung, Arme in langsamen Bögen.',
+   meaning:'Walking made conscious, made devotional.',
+   fn:seq(['stepWideL','sweepLowL','stepWideR','sweepLowR'],1.9)},
+  {dance:'Manipuri · Manipur', name:'The Floating Step',
+   text:'Steps like setting feet on still water — head level, no bounce.', de:'Schritte wie auf stilles Wasser gesetzt — Kopf gerade, kein Wippen.',
+   meaning:'The earth is sacred; carry as little ego-weight as possible.',
+   fn:seq(['stepWideL','overheadR','stepWideR','overheadL'],2.3)},
+  {dance:'Manipuri · Manipur', name:'The Circular Flow',
+   text:'Turn slowly like the earth rotating, a wave through the arms.', de:'Dreh dich langsam wie die rotierende Erde, eine Welle durch die Arme.',
+   meaning:'Time is circular; every ending contains a beginning.',
+   fn:seq(['reachL','overheadL','overheadR','reachR','sweepLowR','sweepLowL'],1.7)},
+  {dance:'Manipuri · Manipur', name:'Hands Like Water',
+   text:'Fingers curl and open in exchange, wrists free, like the tide.', de:'Finger krümmen und öffnen sich abwechselnd, Handgelenke frei, wie die Flut.',
+   meaning:'The hands are not stating — they are singing nature.',
+   fn:seq(['sweepLowL','reachL','wingsHigh','reachR','sweepLowR'],1.8)},
+  {dance:'Chhau · East India', name:'The Warrior Leap',
+   text:'Coil low, explode upward, arms wide — land in silence.', de:'Geh tief in die Hocke, explodiere nach oben, Arme weit — lande lautlos.',
+   meaning:'Divine fury exceeding what ordinary bodies can do.',
+   fn:seq(['squat','kneeL','lungeR','kneeR','lungeL'],1.4)},
+  {dance:'Chhau · East India', name:'The Demon Walk',
+   text:'Be enormous: slow, heavy steps, eyes above the crowd.', de:'Sei gewaltig: langsame, schwere Schritte, Blick über die Menge.',
+   meaning:'Tamas — the necessary weight and darkness of the cosmos.',
+   fn:seq(['stepWideL','squat','stepWideR','squat'],2.4)},
+  {dance:'Garba · Gujarat', name:'The Circle Walk',
+   text:'Walk counterclockwise around the sacred center.', de:'Geh gegen den Uhrzeigersinn um die heilige Mitte.',
+   meaning:'Every dancer becomes a planet orbiting the divine.',
+   fn:seq(['stepWideL','hipsHands','stepWideR','hipsHands'],1.7)},
+  {dance:'Garba · Gujarat', name:'Teen Taali — Three Claps',
+   text:'Clap above, at heart, at waist — the body as percussion.', de:'Klatsche oben, am Herzen, an der Taille — der Körper als Perkussion.',
+   meaning:'Three claps for three aspects of the goddess.',
+   fn:seq(['clapFront','sweepLowL','clapFront','sweepLowR','clapFront','armsUp'],1.2)},
+  {dance:'Garba · Gujarat', name:'Dandiya Ras — Stick Strike',
+   text:'Strike right, strike left, strike above — every hit rings.', de:'Schlag rechts, schlag links, schlag oben — jeder Schlag klingt.',
+   meaning:'Re-sounding the cosmic battle of goddess and demon.',
+   fn:seq(['snapHighR','sweepLowL','snapHighL','sweepLowR'],1.2)},
+  {dance:'Bhangra · Punjab', name:'The Shoulder Roll',
+   text:'Roll shoulders in big opposing circles, knees bouncing.', de:'Rolle die Schultern in großen gegenläufigen Kreisen, Knie federn.',
+   meaning:'Farm labour transformed into gratitude and joy.',
+   fn:seq(['chestOpen','crossArms','wingsHigh','crossArms'],1.5)},
+  {dance:'Bhangra · Punjab', name:'The Bhangra Jump',
+   text:'Deep bend — then jump, arms rising, land soft and go again.', de:'Tief beugen — dann springen, Arme heben, weich landen und weiter.',
+   meaning:'A whole season of worry released upward in one moment.',
+   fn:seq(['armsUp','squat','armsUp','kneeL','armsUp','kneeR'],1.1)},
+  {dance:'Bhangra · Punjab', name:'Kato — The Waist Bend',
+   text:'Arms overhead, bend deep right, then deep left, with momentum.', de:'Arme über dem Kopf, tief nach rechts beugen, dann nach links, mit Schwung.',
+   meaning:'Chardikala: optimism that refuses defeat.',
+   fn:seq(['reachL','bowFwd','reachR','chestOpen'],2.0)},
+  {dance:'Bhangra · Punjab', name:'Dhamaal — Full Release',
+   text:'Everything at once — shoulders, knees, arms, head. Hold nothing.', de:'Alles auf einmal — Schultern, Knie, Arme, Kopf. Halte nichts zurück.',
+   meaning:'The body at its most free is most connected to others.',
+   fn:seq(['armsUp','kickL','wingsHigh','kickR','overheadL','overheadR'],1.3)},
+  {dance:'Bihu · Assam', name:'The Flutter Hands',
+   text:'Wrists loose, hands flutter like new leaves in spring wind.', de:'Handgelenke locker, Hände flattern wie junge Blätter im Frühlingswind.',
+   meaning:'The human body waking with the land after winter.',
+   fn:seq(['wingsHigh','tPose','armsUp','tPose'],1.3)},
+  {dance:'Bihu · Assam', name:'Dolobari — The Hip Sway',
+   text:'Full generous weight shifts hip to hip, arms exchanging.', de:'Volle großzügige Gewichtsverlagerung von Hüfte zu Hüfte, Arme im Wechsel.',
+   meaning:'Celebrating fertility and the continuation of life.',
+   fn:seq(['stepWideL','overheadL','stepWideR','overheadR'],1.8)},
+  {dance:'Lavani · Maharashtra', name:'The Hip Stitch',
+   text:'Sharp isolated hip pops — upper body still, face composed.', de:'Scharfe isolierte Hüftstöße — Oberkörper still, Gesicht gefasst.',
+   meaning:'Precise self-ownership that cannot be passively consumed.',
+   fn:seq(['hipsHands','stepWideL','hipsHands','stepWideR'],1.4)},
+  {dance:'Lavani · Maharashtra', name:'Abhangi — Devotional Stance',
+   text:'Weight on one leg, palms together at chest, eyes inward.', de:'Gewicht auf einem Bein, Handflächen an der Brust, Blick nach innen.',
+   meaning:'The sacred and the sensuous are the same aliveness.',
+   fn:seq(['prayer','overheadL','prayer','overheadR'],2.2)},
+
+  // ---------------- INDIA · BHARATANATYAM ----------------
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Namaskaram — The Salutation',
+   text:'Touch the earth, bring palms together, greet the space and the divine.', de:'Berühre die Erde, führe die Handflächen zusammen, grüße den Raum und das Göttliche.',
+   meaning:'Asking the earth\'s forgiveness for striking it with the feet.',
+   fn:seq(['bowFwd','prayer','prayerHigh','prayer'],2.2)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Araimandi — The Half-Sit',
+   text:'Knees turned out, sit halfway down, spine tall — hold the diamond.', de:'Knie nach außen, halb hinsetzen, Wirbelsäule aufrecht — halte den Diamanten.',
+   meaning:'The fundamental posture; the body as balanced geometry.',
+   fn:seq(['halfSit','tPose','halfSit','wingsHigh'],2.0)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Tatta Adavu — Striking Feet',
+   text:'In half-sit, lift and strike the floor flat — right, then left.', de:'Im Halbsitz heben und den Boden flach schlagen — rechts, dann links.',
+   meaning:'The first lesson: rhythm enters the body through the feet.',
+   fn:seq(['halfSit','kneeR','halfSit','kneeL'],1.3)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Natta Adavu — The Stretch Step',
+   text:'Stretch one leg to the side, heel first, arms opening with it.', de:'Strecke ein Bein zur Seite, Ferse zuerst, die Arme öffnen sich mit.',
+   meaning:'Line and extension; the body drawing geometry in space.',
+   fn:seq(['stepWideR','mudraFrontR','stepWideL','mudraFrontL'],1.8)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Kuditta Mettu — Jump and Heel',
+   text:'Small jump onto both toes, then strike the heels down.', de:'Kleiner Sprung auf beide Zehenspitzen, dann die Fersen aufsetzen.',
+   meaning:'Lightness and weight in one breath.',
+   fn:seq(['squat','armsUp','kneeR','armsUp','kneeL'],1.3)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Alarippu — The Blossoming',
+   text:'Unfold from stillness: eyes, neck, shoulders, arms — like a flower opening.', de:'Entfalte dich aus der Stille: Augen, Nacken, Schultern, Arme — wie eine sich öffnende Blume.',
+   meaning:'The dancer\'s body awakening limb by limb as an offering.',
+   fn:seq(['prayer','chestOpen','wingsHigh','armsUp'],2.2)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Pataka — The Flag Hands',
+   text:'Extend one flat hand forward like a flag, the other at your chest.', de:'Strecke eine flache Hand wie eine Fahne nach vorn, die andere an die Brust.',
+   meaning:'The first mudra: hands begin to speak.',
+   fn:seq(['mudraFrontR','tPose','mudraFrontL','tPose'],1.7)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Alapadma — The Lotus',
+   text:'Open the fingers wide like a lotus in full bloom, raised high.', de:'Öffne die Finger weit wie eine voll erblühte Lotusblüte, hoch erhoben.',
+   meaning:'Offering beauty; the open flower of the hand.',
+   fn:seq(['prayerHigh','wingsHigh','overheadL','overheadR'],1.9)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Sarikal — The Glide',
+   text:'Slide one foot along the floor while the torso bends away.', de:'Gleite mit einem Fuß über den Boden, während sich der Oberkörper wegbiegt.',
+   meaning:'Moving without leaving the earth.',
+   fn:seq(['sideBendL','stepWideL','sideBendR','stepWideR'],1.8)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Teermanam — The Ending Phrase',
+   text:'Three sharp accents, then land in a held final pose.', de:'Drei scharfe Akzente, dann lande in einer gehaltenen Endpose.',
+   meaning:'A sentence of rhythm, signed with a full stop.',
+   fn:seq(['snapHighR','clapFront','snapHighL','clapFront','armsUp'],1.2)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Mayura — The Peacock Hand',
+   text:'Curve the hand like a peacock\'s neck, sweep it across and up.', de:'Krümme die Hand wie den Hals eines Pfaus, führe sie quer und hoch.',
+   meaning:'The dancer becomes the sacred bird.',
+   fn:seq(['mudraFrontR','overheadR','mudraFrontL','overheadL'],1.9)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Shikhara — The Peak',
+   text:'Raise a firm fist skyward like a mountain peak, held on the diagonal.', de:'Hebe eine feste Faust himmelwärts wie einen Berggipfel, diagonal gehalten.',
+   meaning:'Resolve, strength, the bow of Shiva.',
+   fn:seq(['armsUp','prayerHigh','diagR','diagL'],1.8)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Kartari — The Scissors',
+   text:'Cross the arms before you, then cut them open wide.', de:'Kreuze die Arme vor dir, dann öffne sie weit auseinander.',
+   meaning:'Separation and opposition; two forces crossing.',
+   fn:seq(['crossArms','tPose','crossArms','wingsHigh'],1.5)},
+  {dance:'Bharatanatyam · Tamil Nadu', name:'Mandi Adavu — The Deep Sit',
+   text:'Drop to the full sit, knees wide, then rise striking the rhythm.', de:'Geh in den vollen Sitz, Knie weit, dann erhebe dich im Rhythmus schlagend.',
+   meaning:'The hardest ground work: devotion in the deepest bend.',
+   fn:seq(['squat','halfSit','kneeR','halfSit','kneeL'],1.5)},
+
+  // ---------------- IRAN ----------------
+  {dance:'Bandari · Persian Gulf', name:'Fisherman Net Pull',
+   text:'Pull both arms back as if hauling a heavy rope from the sea.', de:'Zieh beide Arme zurück, als zögest du ein schweres Seil aus dem Meer.',
+   meaning:'The collective effort of fishermen made into dance.',
+   fn:seq(['reachR','crossArms','sweepLowL','reachR'],1.8)},
+  {dance:'Bandari · Persian Gulf', name:'Shoulder & Chest Vibration',
+   text:'Continuous rhythmic shivers through shoulders and chest.', de:'Fortlaufendes rhythmisches Zittern durch Schultern und Brust.',
+   meaning:'The energy of music shaped by cultures meeting at the ports.',
+   fn:seq(['chestOpen','crossArms','chestOpen','wingsHigh'],1.1)},
+  {dance:'Bandari · Persian Gulf', name:'Hair & Torso Waves',
+   text:'Swing head in circles while the torso lifts and falls.', de:'Schwinge den Kopf im Kreis, während sich der Oberkörper hebt und senkt.',
+   meaning:'The body amplified like waves rising on the sea.',
+   fn:seq(['bowFwd','chestOpen','overheadL','bowFwd','chestOpen','overheadR'],1.6)},
+  {dance:'Zār ritual · Southern Iran', name:'The Healing Shake',
+   text:'Shake the head side to side, hands trembling, body pushing fwd/back.', de:'Schüttle den Kopf hin und her, Hände zitternd, Körper vor und zurück.',
+   meaning:'Driving the harmful wind out of the body.',
+   fn:seq(['wingsHigh','sweepLowL','wingsHigh','sweepLowR'],1.2)},
+  {dance:'Zār ritual · Southern Iran', name:'Trance Repetition',
+   text:'Repeat one simple pattern as the rhythm slowly accelerates.', de:'Wiederhole ein einfaches Muster, während der Rhythmus langsam schneller wird.',
+   meaning:'Repetition until exhaustion and ecstasy are one.',
+   fn:seq(['prayerHigh','bowFwd','prayerHigh','bowFwd'],1.9)},
+  {dance:'Bandari · Persian Gulf', name:'Hip Dialogue',
+   text:'Weight on one leg, striking the hip rhythmically with the other side.', de:'Gewicht auf einem Bein, mit der anderen Seite rhythmisch die Hüfte stoßen.',
+   meaning:'A constant dialogue between balance and movement.',
+   fn:seq(['hipsHands','stepWideL','hipsHands','stepWideR'],1.5)},
+  {dance:'Bandari · Persian Gulf', name:'The Deep Arch',
+   text:'Bend forward toward the ground, then arch dramatically back.', de:'Beuge dich zum Boden nach vorn, dann wölbe dich dramatisch zurück.',
+   meaning:'Strength, endurance, mastery over the body.',
+   fn:seq(['bowFwd','neutral','chestOpen','armsUp'],2.1)},
+  {dance:'Rezif · Persian Gulf', name:'Shoulder Line',
+   text:'Hand on your neighbour\'s shoulder, stepping forward and back as one.', de:'Hand auf der Schulter des Nachbarn, gemeinsam vor und zurück schreiten.',
+   meaning:'The group becomes a single synchronized body.',
+   fn:seq(['tPose','crossArms','tPose','wingsHigh'],1.6)},
+  {dance:'Sword dance · Persian Gulf', name:'Sword Overhead',
+   text:'Swing the blade above the head to the rhythm of drums.', de:'Schwinge die Klinge über dem Kopf im Rhythmus der Trommeln.',
+   meaning:'Tools of conflict become a performance of honor.',
+   fn:seq(['snapHighR','diagR','snapHighR','armsUp'],1.7)},
+  {dance:'Choub-Bazi · Lur tradition', name:'The Stick Guard',
+   text:'Hold a defensive stance, circling, watching for an opening.', de:'Halte eine Verteidigungshaltung, kreise, warte auf eine Lücke.',
+   meaning:'Combat skill turned into agility, timing, intelligence.',
+   fn:seq(['crossArms','lungeL','crossArms','lungeR'],1.7)},
+  {dance:'Handkerchief dance · Iran', name:'Scarves & Bent Knees',
+   text:'Scarves above the head sweeping side to side, legs bending in turn.', de:'Tücher über dem Kopf hin und her schwingen, Beine abwechselnd beugen.',
+   meaning:'Movement made visible through color and flowing cloth.',
+   fn:seq(['squat','overheadL','squat','overheadR'],1.8)},
+  {dance:'Rowing dance · Persian Gulf', name:'The Oar Circles',
+   text:'Broad alternating arm circles, weight shifting side to side.', de:'Breite abwechselnde Armkreise, Gewicht von Seite zu Seite verlagern.',
+   meaning:'The repetitive motion of rowing across open water.',
+   fn:seq(['reachL','sweepLowL','sweepLowR','reachR'],1.6)},
+
+  // ---------------- TURKEY & AZERBAIJAN ----------------
+  {dance:'Zeybek · Aegean Anatolia', name:'The Proud Stand',
+   text:'Chest lifted, head high, gaze fixed on the horizon.', de:'Brust gehoben, Kopf hoch, Blick fest auf den Horizont.',
+   meaning:'Dignity, courage, unwavering self-confidence.',
+   fn:seq(['hipsHands','chestOpen','hipsHands','armsUp'],2.2)},
+  {dance:'Zeybek · Aegean Anatolia', name:'Eagle Wings',
+   text:'Extend both arms wide like the wings of an eagle.', de:'Breite beide Arme weit aus wie die Flügel eines Adlers.',
+   meaning:'Freedom, protection, the warrior\'s powerful presence.',
+   fn:seq(['wingsHigh','tPose','armsUp','tPose'],1.8)},
+  {dance:'Zeybek · Aegean Anatolia', name:'Kneel and Rise',
+   text:'Lower to one knee, chest lifted — then rise without breaking posture.', de:'Senke dich auf ein Knie, Brust gehoben — dann erhebe dich ohne die Haltung zu brechen.',
+   meaning:'Humility, then determination that overcomes hardship.',
+   fn:seq(['squat','kneeL','armsUp','squat','kneeR','armsUp'],1.8)},
+  {dance:'Zeybek · Aegean Anatolia', name:'The Slow Claim',
+   text:'Rotate gradually with wide arms and steady footing.', de:'Drehe dich allmählich mit weiten Armen und festem Stand.',
+   meaning:'Claiming the surrounding space with confidence.',
+   fn:seq(['tPose','reachL','wingsHigh','reachR'],2.4)},
+  {dance:'Sema · Mevlevi Türkiye', name:'Arms Crossed — The Beginning',
+   text:'Head inclined, arms crossed over the chest.', de:'Kopf geneigt, Arme über der Brust gekreuzt.',
+   meaning:'The unity of God; the journey\'s spiritual beginning.',
+   fn:seq(['crossArms','neutral','crossArms','chestOpen'],2.0)},
+  {dance:'Sema · Mevlevi Türkiye', name:'The Whirling',
+   text:'Turn continuously around your own axis, right palm up, left palm down.', de:'Drehe dich fortwährend um die eigene Achse, rechte Hand nach oben, linke nach unten.',
+   meaning:'Receiving divine grace and passing it to the world.',
+   fn:seq(['diagR','overheadR','diagL','overheadL'],2.2)},
+  {dance:'Azerbaijani dance', name:'On the Toes',
+   text:'Rise tall on the tips of the toes, body stretched upward.', de:'Erhebe dich hoch auf die Zehenspitzen, Körper nach oben gestreckt.',
+   meaning:'Taller, lighter, faster — the proud elevated body.',
+   fn:seq(['kneeL','armsUp','kneeR','armsUp'],1.3)},
+  {dance:'Azerbaijani dance', name:'The Statue Freeze',
+   text:'Circle slowly with expressive hands — then freeze when the music stops.', de:'Kreise langsam mit ausdrucksvollen Händen — erstarre, wenn die Musik stoppt.',
+   meaning:'The human body becomes humor and sculpture.',
+   fn:seq(['reachL','tPose','reachR','armsUp'],1.9)},
+  {dance:'Azerbaijani dance', name:'Elder\'s Dignity',
+   text:'Calm, mature, controlled gestures — never rushing.', de:'Ruhige, reife, kontrollierte Gesten — niemals hastig.',
+   meaning:'Dignity and beauty do not belong only to the young.',
+   fn:seq(['chestOpen','stepWideL','chestOpen','stepWideR'],2.4)},
+  {dance:'Halay · Anatolia', name:'The Line Dance',
+   text:'Shoulders linked, step to the side and stamp together as one line.', de:'Schultern verbunden, tritt zur Seite und stampft gemeinsam als eine Linie.',
+   meaning:'Village unity — everyone moves as a single body.',
+   fn:seq(['tPose','stepWideR','tPose','stepWideL'],1.5)},
+  {dance:'Horon · Black Sea', name:'The Trembling',
+   text:'Rapid small shakes of the whole body, arms raised and quivering.', de:'Schnelle kleine Erschütterungen des ganzen Körpers, Arme erhoben und bebend.',
+   meaning:'The shiver of the anchovy and the restless Black Sea.',
+   fn:seq(['wingsHigh','armsUp','wingsHigh','armsUp'],0.9)},
+  {dance:'Kaşık · Spoon dance', name:'The Spoon Clap',
+   text:'Click imaginary spoons overhead, then low, turning side to side.', de:'Klicke imaginäre Löffel über dem Kopf, dann tief, drehe dich hin und her.',
+   meaning:'Joy and celebration from the Anatolian heartland.',
+   fn:seq(['overheadL','sweepLowR','overheadR','sweepLowL'],1.3)},
+  {dance:'Kochari · Anatolia & Caucasus', name:'The Mountain Step',
+   text:'Heavy synchronized steps forward and back, knees springing.', de:'Schwere synchrone Schritte vor und zurück, Knie federnd.',
+   meaning:'The strength of the mountains, danced shoulder to shoulder.',
+   fn:seq(['halfSit','stepWideR','halfSit','stepWideL'],1.5)},
+  {dance:'Lezginka · Caucasus', name:'The Eagle Turn',
+   text:'Rise onto the toes, arms wide like wings, dart sharply across.', de:'Erhebe dich auf die Zehen, Arme weit wie Flügel, schieße scharf hinüber.',
+   meaning:'The proud eagle of the Caucasus mountains.',
+   fn:seq(['tPose','kickHighR','tPose','kickHighL'],1.3)},
+
+  // ---------------- CHINA ----------------
+  {dance:'Court dance · China', name:'Immortal\'s Pivot',
+   text:'A weightless single-foot pivot turn, posture lifted, sleeves flaring.', de:'Eine schwerelose Drehung auf einem Fuß, Haltung gehoben, Ärmel wehend.',
+   meaning:'Depicting how the immortals live in the heavens.',
+   fn:seq(['overheadL','wingsHigh','overheadR','prayerHigh'],2.0)},
+  {dance:'Hu Xuan · Western Regions', name:'Spinning on the Mat',
+   text:'Rapid continuous spinning on one foot, arms high, skirt flaring.', de:'Schnelles fortlaufendes Drehen auf einem Fuß, Arme hoch, Rock wehend.',
+   meaning:'Splendid amusement for the imperial banquet.',
+   fn:seq(['armsUp','diagL','overheadR','diagR','overheadL'],1.3)},
+  {dance:'Errenzhuan · Northeast China', name:'Handkerchief & Fan',
+   text:'Hips twist with the drum, wrists spin the handkerchief and flip the fan.', de:'Hüften drehen sich zur Trommel, Handgelenke wirbeln das Tuch und schlagen den Fächer.',
+   meaning:'Celebrating and praying for the harvest.',
+   fn:seq(['snapHighR','reachR','snapHighL','reachL'],1.5)},
+  {dance:'Flower Drum · China', name:'The Story Drum',
+   text:'Strike the drum and rim alternately while swaying and gliding.', de:'Schlage abwechselnd Trommel und Rand, während du schwingst und gleitest.',
+   meaning:'Folk stories and the hardships of daily life, sung and drummed.',
+   fn:seq(['drumLow','snapHighR','drumLow','snapHighL'],1.1)},
+  {dance:'Yayue · Imperial ritual', name:'The Ritual Square',
+   text:'Step forward, back, and turn in perfect uniform slowness.', de:'Schreite vor, zurück und drehe dich in perfekter gleichmäßiger Langsamkeit.',
+   meaning:'Hierarchical order; reverence for heaven, earth, ancestors.',
+   fn:seq(['prayerHigh','stepWideL','prayerHigh','stepWideR'],2.4)},
+  {dance:'Nuo · Exorcism dance', name:'Mask Stomp',
+   text:'Stomp heavily, swing arms wide in striking, driving gestures.', de:'Stampfe schwer, schwinge die Arme weit in schlagenden, treibenden Gesten.',
+   meaning:'Driving away plague demons; praying for safety and harvest.',
+   fn:seq(['squat','kneeL','squat','kneeR'],1.4)},
+  {dance:'Dragon dance · China', name:'The Dragon Body',
+   text:'Rise and fall in sync, spiraling forward as one long body.', de:'Hebe und senke dich im Takt, spirale vorwärts als ein langer Körper.',
+   meaning:'Favorable weather, national peace, collective unity.',
+   fn:seq(['sweepLowL','overheadL','overheadR','sweepLowR'],1.6)},
+  {dance:'Lion dance · Southern China', name:'The Lion Pounce',
+   text:'Horse stance — leap, dodge, turn and pounce like the lion.', de:'Reiterstellung — springe, weiche aus, drehe dich und stürze dich wie der Löwe.',
+   meaning:'Driving away evil, attracting fortune and prosperity.',
+   fn:seq(['squat','lungeL','squat','lungeR'],1.5)},
+  {dance:'Waist drum · Loess Plateau', name:'Ansai Drummers',
+   text:'Leap, kick and twist while striking the waist drum, ribbons flying.', de:'Springe, tritt und drehe dich, während du die Taillentrommel schlägst, Bänder fliegen.',
+   meaning:'The bold vitality of the plateau people.',
+   fn:seq(['drumLow','armsUp','drumLow','kneeL','drumLow','kneeR'],1.1)},
+  {dance:'Peacock dance · Dai people', name:'The Peacock',
+   text:'Three-bend posture, wavelike arms, tiny light steps.', de:'Dreifach gebogene Haltung, wellenförmige Arme, winzige leichte Schritte.',
+   meaning:'Good fortune, happiness, reverence for nature.',
+   fn:seq(['wingsHigh','reachL','wingsHigh','reachR'],1.9)},
+  {dance:'Bonfire circle · China', name:'Around the Fire',
+   text:'Hands joined in a circle, stomping counterclockwise, singing.', de:'Hände im Kreis verbunden, gegen den Uhrzeigersinn stampfend, singend.',
+   meaning:'Harvest, social joy, the village\'s peace and prosperity.',
+   fn:seq(['stepWideL','clapFront','stepWideR','clapFront'],1.4)},
+  {dance:'Tea-picking dance · China', name:'Mincing Tea Steps',
+   text:'Light tiny steps, bending to pluck leaves, chasing butterflies.', de:'Leichte winzige Schritte, bücken zum Blätterpflücken, Schmetterlingen nachjagend.',
+   meaning:'The vivid tea-harvest life of mountain villages.',
+   fn:seq(['stepWideL','sweepLowR','stepWideR','sweepLowL'],1.3)},
+
+  // ---- REVOLVE demo moves (turning to face left / right in space) ----
+  {dance:'Sufi · Whirling', name:'Turning Body',
+   text:'Turn the whole body to face left, then right, arms open.', de:'Drehe den ganzen Körper nach links, dann nach rechts, Arme offen.',
+   meaning:'Revolving in space — facing every direction of the world.',
+   fn:t=>poseFrom(M.revolveOpen(t,1.1))},
+  {dance:'Folk · Revolve', name:'Facing the Circle',
+   text:'Rotate your torso to face side to side while stepping.', de:'Drehe den Oberkörper von Seite zu Seite, während du schreitest.',
+   meaning:'Turning to acknowledge the dancers around you.',
+   fn:t=>poseFrom({...M.revolve(t,0.9),...M.sideStep(t,2)})},
+
+  // ================= ETHIOPIA — Eskista =================
+  {dance:'Eskista · Ethiopia', name:'Rapid Shoulder Shimmy',
+   text:'Thrust both shoulders fast forward and back, lower body still.', de:'Stoße beide Schultern schnell vor und zurück, Unterkörper still.',
+   meaning:'Mimics a snake or spiritual trembling — deep emotion.',
+   fn:t=>poseFrom(M.vibrate(t,0.02,26))},
+  {dance:'Eskista · Ethiopia', name:'Chest Pop and Drop',
+   text:'Push the chest forward and up, then collapse it back down.', de:'Schiebe die Brust vor und hoch, dann lass sie zurückfallen.',
+   meaning:'The heartbeat and vitality of the dancer.',
+   fn:t=>poseFrom(M.torsoArch(t*1.4))},
+  {dance:'Eskista · Ethiopia', name:'Stooping Shoulder Roll',
+   text:'Bend forward at the waist, rolling both shoulders in circles.', de:'Beuge dich in der Taille vor und rolle beide Schultern in Kreisen.',
+   meaning:'Deep respect and earthbound groundedness.',
+   fn:t=>poseFrom({...M.torsoArch(t*0.5),...M.vibrate(t,0.014,14)})},
+  {dance:'Eskista · Ethiopia', name:'Neck Glide',
+   text:'Slide the head sharply forward and back, torso still.', de:'Schiebe den Kopf scharf vor und zurück, Oberkörper still.',
+   meaning:'Upper-body agility and rhythmic mastery.',
+   fn:t=>poseFrom(M.headNod(t*1.3))},
+
+  // ================= RUSSIA — Cossack =================
+  {dance:'Cossack · Russia', name:'Prisiadka — Squat Kick',
+   text:'Deep squat, then kick one leg out fast, alternating legs.', de:'Tiefe Hocke, dann ein Bein schnell auskicken, Beine abwechselnd.',
+   meaning:'Strength, stamina, and martial readiness.',
+   fn:t=>poseFrom({...M.kneeBend(t*0.5),...M.kick(t,4)})},
+  {dance:'Cossack · Russia', name:'Standing High Kick',
+   text:'Kick one straight leg high toward the chest, heavy landing.', de:'Kicke ein gestrecktes Bein hoch zur Brust, schwere Landung.',
+   meaning:'Bravado and intimidating flexibility.',
+   fn:t=>poseFrom(M.kick(t,3))},
+  {dance:'Cossack · Russia', name:'Low Floor Spin',
+   text:'Crouch low and whip the body into a fast horizontal spin.', de:'Geh tief in die Hocke und wirble den Körper in eine schnelle waagerechte Drehung.',
+   meaning:'Evasion and agility of cavalry combat.',
+   fn:t=>poseFrom({...M.spin(t,5),...M.kneeBend(t*0.5)})},
+
+  // ================= BRAZIL — Samba =================
+  {dance:'Samba · Brazil', name:'Samba no pé — Basic Step',
+   text:'Fast bouncy steps foot to foot, knees bent, hips swaying.', de:'Schnelle federnde Schritte von Fuß zu Fuß, Knie gebeugt, Hüften schwingend.',
+   meaning:'Joy and Afro-Brazilian polyrhythmic heritage.',
+   fn:t=>poseFrom({...M.sideStep(t,3.5),...M.twist(t*1.2)})},
+  {dance:'Samba · Brazil', name:'Lateral Hip Swing',
+   text:'Feet wide, swing the hips fast in a figure-eight, upper body still.', de:'Füße weit, schwinge die Hüften schnell in einer Acht, Oberkörper still.',
+   meaning:'Sensuality and the release of carnival.',
+   fn:t=>poseFrom({...M.twist(t*1.5),__shift:Math.sin(t*3)*0.05})},
+  {dance:'Samba · Brazil', name:'Fast Foot Taps',
+   text:'Hop on one leg, rapidly tap the other toe to side and front.', de:'Hüpfe auf einem Bein, tippe schnell mit der anderen Zehe zur Seite und nach vorn.',
+   meaning:'Fast footwork and improvisation to complex drums.',
+   fn:t=>poseFrom(M.kick(t,6))},
+  {dance:'Samba · Brazil', name:'Rapid Traveling Spin',
+   text:'Cross one foot over the other, spin fast while traveling.', de:'Kreuze einen Fuß über den anderen, drehe dich schnell im Vorwärtsgehen.',
+   meaning:'The euphoric momentum of the carnival parade.',
+   fn:t=>poseFrom(M.spin(t,5))},
+
+  // ================= NEW ZEALAND — Haka =================
+  {dance:'Haka · New Zealand', name:'Takahia — Foot Stomp',
+   text:'Raise a leg and drive the foot hard into the ground, wide stance.', de:'Hebe ein Bein und stampfe den Fuß hart in den Boden, breiter Stand.',
+   meaning:'Power connected to the earth; asserting presence.',
+   fn:t=>poseFrom(M.stomp(t,2.5))},
+  {dance:'Haka · New Zealand', name:'Thigh and Chest Slap',
+   text:'Swing arms out and slap hands to chest and thighs on the beat.', de:'Schwinge die Arme aus und schlage die Hände auf Brust und Schenkel im Takt.',
+   meaning:'The body as a percussion instrument to intimidate.',
+   fn:t=>poseFrom(M.clap(t,4))},
+  {dance:'Haka · New Zealand', name:'Wide Squat Stance',
+   text:'Drop low into a wide rigid squat, torso upright and tense.', de:'Geh tief in eine breite, starre Hocke, Oberkörper aufrecht und gespannt.',
+   meaning:'The warrior posture — unwavering strength.',
+   fn:t=>poseFrom(M.kneeBend(t*0.6))},
+  {dance:'Haka · New Zealand', name:'Forearm Block and Strike',
+   text:'Punch one arm forward, pull the other back to the hip, switch sharply.', de:'Stoße einen Arm nach vorn, zieh den anderen zur Hüfte zurück, wechsle scharf.',
+   meaning:'Combat blocks and strikes — martial prowess.',
+   fn:t=>poseFrom(M.pullChest(t*1.4))},
+
+  // ================= SPAIN — Flamenco =================
+  {dance:'Flamenco · Spain', name:'Zapateado — Heel Stomp',
+   text:'Strike the floor fast with heel and toe, torso upright and stiff.', de:'Schlage schnell mit Ferse und Zehe auf den Boden, Oberkörper aufrecht und steif.',
+   meaning:'The dancer as percussionist — sorrow or fierce joy.',
+   fn:t=>poseFrom(M.stomp(t,5))},
+  {dance:'Flamenco · Spain', name:'Braceo — Arm Sweeps',
+   text:'Raise curved arms overhead, sweep them slowly down and across.', de:'Hebe gebogene Arme über den Kopf, führe sie langsam herab und quer.',
+   meaning:'Expressing the inner emotional state.',
+   fn:t=>poseFrom(M.armCircles(t*0.5))},
+  {dance:'Flamenco · Spain', name:'Torso Arch',
+   text:'Feet planted, arch the upper back, chest out, chin up — a slow pause.', de:'Füße fest, wölbe den oberen Rücken, Brust raus, Kinn hoch — eine langsame Pause.',
+   meaning:'Pride, defiance, and fierce dignity.',
+   fn:t=>poseFrom(M.torsoArch(t*0.5))},
+  {dance:'Flamenco · Spain', name:'Vuelta Quebrada — Broken Turn',
+   text:'Fast spin on one foot, arching the back, ending in a sharp freeze.', de:'Schnelle Drehung auf einem Fuß, Rücken gewölbt, endet in scharfem Erstarren.',
+   meaning:'The sudden shifts of passion and tension.',
+   fn:t=>poseFrom({...M.spin(t,3),...M.torsoArch(t*0.5)})},
+
+  // ================= SOUTH AFRICA — Gumboot =================
+  {dance:'Gumboot · South Africa', name:'Side Boot Slap',
+   text:'Lift one bent leg to the side, slap the boot with the opposite hand.', de:'Hebe ein gebeugtes Bein zur Seite, schlage mit der gegenüberliegenden Hand auf den Stiefel.',
+   meaning:'The code miners used to talk underground in silence.',
+   fn:t=>poseFrom({...M.kneeLift(t,3),...M.clap(t,3)})},
+  {dance:'Gumboot · South Africa', name:'Synchronized Double Stomp',
+   text:'Stamp one foot down hard, then the other, for a resonant thud.', de:'Stampfe einen Fuß hart auf, dann den anderen, für einen dröhnenden Schlag.',
+   meaning:'Solidarity, collective strength, shared labor.',
+   fn:t=>poseFrom(M.stomp(t,2.5))},
+  {dance:'Gumboot · South Africa', name:'Side Knee Slap',
+   text:'Lift one knee to the side and slap it, then the other.', de:'Hebe ein Knie zur Seite und schlage darauf, dann das andere.',
+   meaning:'Playful agility and defiance of harsh conditions.',
+   fn:t=>poseFrom({...M.kneeLift(t,3),...M.clap(t,3)})},
+  {dance:'Gumboot · South Africa', name:'The Salute Wipe',
+   text:'Slide one foot up the other ankle, then stomp it down fast.', de:'Gleite mit einem Fuß am anderen Knöchel hoch, dann stampfe ihn schnell auf.',
+   meaning:'Mocking the authority figures of the mining camps.',
+   fn:t=>poseFrom(M.stomp(t,3))},
+
+  // ================= IRELAND — Stepdance =================
+  {dance:'Stepdance · Ireland', name:'High Front Click',
+   text:'Arms pinned stiff to the sides, kick one straight leg high in front.', de:'Arme steif an den Seiten, kicke ein gestrecktes Bein hoch nach vorn.',
+   meaning:'Discipline, control, and athletic prowess.',
+   fn:t=>poseFrom(M.kick(t,3.5))},
+  {dance:'Stepdance · Ireland', name:'Treble — Batter',
+   text:'Hop on one foot while the other rapidly strikes toe-heel-toe.', de:'Hüpfe auf einem Fuß, während der andere schnell Zehe-Ferse-Zehe schlägt.',
+   meaning:'Rhythmic precision — the dancer as part of the music.',
+   fn:t=>poseFrom(M.stomp(t,6))},
+  {dance:'Stepdance · Ireland', name:'High Front Kick',
+   text:'Arms pinned to the sides, kick one straight leg high in front.', de:'Arme an den Seiten fixiert, kicke ein gestrecktes Bein hoch nach vorn.',
+   meaning:'Height and control, the hallmark of the style.',
+   fn:t=>poseFrom(M.kick(t,3))},
+  {dance:'Stepdance · Ireland', name:'Cross-Key Step',
+   text:'Cross one foot over the other, weight side to side, fast small steps.', de:'Kreuze einen Fuß über den anderen, Gewicht von Seite zu Seite, schnelle kleine Schritte.',
+   meaning:'The rapid-fire footwork that is the style\'s hallmark.',
+   fn:t=>poseFrom(M.sideStep(t,4))},
+
+  // ================= GEORGIA — Kartuli =================
+  {dance:'Kartuli · Georgia', name:'Gasma — Toe Glide',
+   text:'Rigid upright, tiny rapid steps on the toes, floating smoothly.', de:'Steif aufrecht, winzige schnelle Schritte auf den Zehen, sanft gleitend.',
+   meaning:'Noble elegance and a frictionless glide.',
+   fn:t=>poseFrom(M.sway(t*1.5,0.04))},
+  {dance:'Kartuli · Georgia', name:'Asymmetrical Arm Hold',
+   text:'One arm out to the side, the other curled at the chest, torso rigid.', de:'Ein Arm zur Seite, der andere an der Brust gekrümmt, Oberkörper starr.',
+   meaning:'A protective shield, or demure grace.',
+   fn:t=>poseFrom({right_wrist:{x:CXX+0.27,y:SHY-0.02},right_elbow:{x:CXX+0.17,y:SHY},left_wrist:{x:CXX-0.02,y:SHY+0.06},left_elbow:{x:CXX-0.12,y:SHY+0.06},nose:{x:CXX,y:0.28+Math.sin(t*1.2)*0.004}})},
+  {dance:'Kartuli · Georgia', name:'Fast Knee Spin',
+   text:'Drop onto both knees and spin fast, pivoting on the knees.', de:'Geh auf beide Knie und drehe dich schnell, auf den Knien pivotierend.',
+   meaning:'Explosive masculine strength and martial agility.',
+   fn:t=>poseFrom({...M.spin(t,5),...M.kneeBend(t*0.5)})},
+  {dance:'Kartuli · Georgia', name:'Rigid Toe Rise',
+   text:'Rise tall onto the toes, body rigid, alternating a lifted knee.', de:'Erhebe dich hoch auf die Zehen, Körper starr, abwechselnd ein Knie hebend.',
+   meaning:'Extreme toughness and the mountain warrior spirit.',
+   fn:t=>poseFrom(M.kneeLift(t,2.5))},
+
+  // ================= AFRICA =================
+  {dance:'Adumu · Maasai (Kenya/Tanzania)', name:'The Jumping Dance',
+   text:'Stand tall and spring straight up from the ankles, body rigid.', de:'Steh aufrecht und springe gerade aus den Knöcheln hoch, Körper starr.',
+   meaning:'A display of strength and endurance by young warriors.',
+   fn:t=>poseFrom(M.kneeLift(t,3))},
+  {dance:'Azonto · Ghana', name:'Azonto Groove',
+   text:'Bent knees bouncing, hands mime everyday gestures to the beat.', de:'Gebeugte Knie federnd, Hände mimen Alltagsgesten im Takt.',
+   meaning:'Playful storytelling through rhythmic hand and hip motion.',
+   fn:t=>poseFrom({...M.kneeBend(t*1.2),...M.armCircles(t)})},
+  {dance:'Kpanlogo · Ghana', name:'Kpanlogo Step',
+   text:'Knees bent low, torso leaning, shoulders and arms swinging freely.', de:'Knie tief gebeugt, Oberkörper geneigt, Schultern und Arme frei schwingend.',
+   meaning:'Youthful celebration and community joy.',
+   fn:t=>poseFrom({...M.kneeBend(t),...M.twist(t)})},
+  {dance:'Indlamu · Zulu (South Africa)', name:'High Kick Stamp',
+   text:'Lift one straight leg high, then bring it down in a firm stamp.', de:'Hebe ein gestrecktes Bein hoch, dann setze es in einem festen Stampfen ab.',
+   meaning:'Warrior strength and pride.',
+   fn:t=>poseFrom(M.kick(t,2.5))},
+  {dance:'Eskista · Ethiopia', name:'Shoulder Bounce Walk',
+   text:'Bounce the shoulders while stepping softly side to side.', de:'Lass die Schultern federn, während du sanft von Seite zu Seite schreitest.',
+   meaning:'Joyful rhythmic play through the upper body.',
+   fn:t=>poseFrom({...M.vibrate(t,0.012,16),...M.sideStep(t,2)})},
+
+  // ================= ORBIT / REVOLVE MOVES =================
+  {dance:'Sema · Mevlevi Türkiye', name:'The Whirling',
+   text:'Turn the whole body around, one palm up, one palm down.', de:'Drehe den ganzen Körper herum, eine Hand nach oben, eine nach unten.',
+   meaning:'Revolving to face every direction — union with the divine.',
+   fn:t=>poseFrom(M.revolveOpen(t,1.0))},
+  {dance:'Bandari · Persian Gulf', name:'Turning Sweep',
+   text:'Sweep the arms wide and revolve the body left, then right.', de:'Führe die Arme weit aus und drehe den Körper nach links, dann nach rechts.',
+   meaning:'The turning motion of celebration by the sea.',
+   fn:t=>poseFrom(M.revolveOpen(t,0.8))},
+  {dance:'Attan · Afghan/Pashtun', name:'Circling Turn',
+   text:'Arms raised, spin the body around in a continuous revolve.', de:'Arme erhoben, drehe den Körper in einer fortlaufenden Umdrehung.',
+   meaning:'The circling group dance of celebration and unity.',
+   fn:t=>poseFrom({...M.revolve(t,1.1),...M.armsOpen(t*0.6)})},
+];
+
+/* ============================================================
+   PART 2 — 2D → 3D bridge.
+   Maps the 2D engine's joints onto a 3D skeleton, adds depth,
+   and turns spin/revolve into real 3D rotation.
+   ============================================================ */
+
+// 2D joints are normalized: x 0..1 (0.5 center), y 0..1 (0 top).
+// Map to 3D meters: center x at 0, invert y so up is +, scale.
+const SCALE_X = 3.2, SCALE_Y = 3.4, Y_OFF = 2.05;
+function to3D(j, z) {
+  return [ (j.x - 0.5) * SCALE_X, Y_OFF - j.y * SCALE_Y, z||0 ];
+}
+// Build a 3D joint set from a 2D pose, INFERRING depth (z) so the figure
+// occupies real 3D space instead of a flat plane.
+// Heuristics: raised/extended hands come forward; wide arms stay out; the
+// torso leans in z with arches; knees lift forward. Depth is subtle so it
+// reads natural, not exaggerated.
+let dtGlobal = 0;
+function pose2Dto3D(p) {
+  const P = {};
+  const g = (k, z) => to3D(p[k], z);
+  const mid = (a,b) => [ (a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2 ];
+
+  const ls=p.left_shoulder, rs=p.right_shoulder, lh=p.left_hip, rh=p.right_hip;
+  const shY = (ls.y+rs.y)/2, hipY=(lh.y+rh.y)/2;
+
+  // --- infer depth per joint ---
+  // hands: the higher/more-extended a wrist, the more it reaches FORWARD (+z)
+  const wristZ = (w, sh) => {
+    if(!w) return 0;
+    const lift = Math.max(0, shY - w.y);        // how far above shoulder
+    const reach = Math.abs(w.x - sh.x);          // horizontal extension
+    return lift*1.4 - reach*0.5;                 // up→forward, wide→flat/back
+  };
+  const lwZ = wristZ(p.left_wrist, ls), rwZ = wristZ(p.right_wrist, rs);
+  const leZ = lwZ*0.5, reZ = rwZ*0.5;            // elbows follow half
+
+  // torso lean: if head is behind hips (arch back) push chest/head -z, else +z
+  const headLean = (p.nose ? (p.nose.x - (lh.x+rh.x)/2) : 0);
+  const chestZ = 0;
+  // knees lift slightly forward
+  const kneeZ = (k, hip) => k ? Math.max(0, (hip.y - k.y) - 0.16) * 1.2 : 0;
+  const lkZ = kneeZ(p.left_knee, lh), rkZ = kneeZ(p.right_knee, rh);
+
+  const lsv=g('left_shoulder',0), rsv=g('right_shoulder',0), lhv=g('left_hip',0), rhv=g('right_hip',0);
+  P.head = g('nose', 0.05);
+  P.neck = mid(lsv,rsv);
+  P.hip = mid(lhv,rhv);
+  P.chest = [ P.neck[0], (P.neck[1]+P.hip[1])/2, chestZ ];
+  P.lShoulder=lsv; P.rShoulder=rsv;
+  P.lElbow=g('left_elbow', leZ); P.rElbow=g('right_elbow', reZ);
+  P.lHand=g('left_wrist', lwZ); P.rHand=g('right_wrist', rwZ);
+  P.lHipJ=lhv; P.rHipJ=rhv;
+  P.lKnee=g('left_knee', lkZ); P.rKnee=g('right_knee', rkZ);
+  P.lFoot=g('left_ankle', lkZ*0.4); P.rFoot=g('right_ankle', rkZ*0.4);
+  return P;
+}
+
+/* ============================================================
+   PART 3 — Three.js 3D figure + scene
+   ============================================================ */
+const three = document.getElementById('three');
+const scene = new THREE.Scene();
+// transparent — the camera feed shows behind the 3D figure
+scene.fog = null;
+
+let camW = () => three.clientWidth || window.innerWidth, camH = () => three.clientHeight || window.innerHeight;
+const camera = new THREE.PerspectiveCamera(45, camW()/camH(), 0.1, 100);
+camera.position.set(1.1, 1.5, 6); // slightly off-axis so 3D depth reads
+camera.lookAt(0, 1.0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setClearColor(0x000000, 0); // transparent
+renderer.setSize(camW(), camH());
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+three.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.0, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 3.5; controls.maxDistance = 11;
+controls.enablePan = false;
+controls.enabled = false; // fixed camera; figure turns via its own rotation
+controls.update();
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(3,6,4); scene.add(key);
+const rim = new THREE.DirectionalLight(0x88bbff, 0.55); rim.position.set(-4,3,-3); scene.add(rim);
+const glow = new THREE.PointLight(0xffffff, 0.4); glow.position.set(0, 4, 2); scene.add(glow);
+
+const WHITE = new THREE.MeshStandardMaterial({ color: 0xf5c518, roughness: 0.45, metalness: 0.05 });
+const figure = new THREE.Group(); scene.add(figure);
+// figure placement: default to participant's RIGHT side
+let figurePos = 'right';   // 'left' | 'center' | 'right'
+const POS_X = { left: -2.4, center: 0, right: 2.0 };
+let figureHeightScale = 1; // set from the participant's tracked height
+function updateFigurePlacement(){
+  figure.position.x = POS_X[figurePos];
+  figure.scale.setScalar(figureHeightScale);
+}
+
+const JOINTS = ['head','neck','chest','hip','lShoulder','rShoulder','lElbow','rElbow','lHand','rHand','lHipJ','rHipJ','lKnee','rKnee','lFoot','rFoot'];
+const BONES = [['head','neck'],['neck','chest'],['chest','hip'],['neck','lShoulder'],['neck','rShoulder'],
+  ['lShoulder','lElbow'],['lElbow','lHand'],['rShoulder','rElbow'],['rElbow','rHand'],
+  ['hip','lHipJ'],['hip','rHipJ'],['lHipJ','lKnee'],['lKnee','lFoot'],['rHipJ','rKnee'],['rKnee','rFoot']];
+
+const jointMeshes = {};
+for (const n of JOINTS) {
+  const r = n==='head' ? 0.16 : 0.055;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r,16,16), WHITE); figure.add(m); jointMeshes[n]=m;
+}
+const boneMeshes = BONES.map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1,12), WHITE); figure.add(m); return m; });
+const UP = new THREE.Vector3(0,1,0);
+function setBone(mesh,a,b){ const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b);
+  const mid=av.clone().add(bv).multiplyScalar(0.5); const dir=bv.clone().sub(av); const len=dir.length()||0.001;
+  mesh.position.copy(mid); mesh.scale.set(1,len,1); mesh.quaternion.setFromUnitVectors(UP,dir.clone().normalize()); }
+// Smoothed joint positions for natural, weighted motion (no robotic snapping).
+const smooth3D = {};
+const SMOOTH3D = 0.18; // lower = heavier/smoother
+function apply3D(pose, instant){
+  for(const n in pose){
+    if(!jointMeshes[n]) continue;
+    const tgt = pose[n];
+    if(instant || !smooth3D[n]){ smooth3D[n] = tgt.slice(); }
+    else {
+      smooth3D[n][0] += (tgt[0]-smooth3D[n][0])*SMOOTH3D;
+      smooth3D[n][1] += (tgt[1]-smooth3D[n][1])*SMOOTH3D;
+      smooth3D[n][2] += (tgt[2]-smooth3D[n][2])*SMOOTH3D;
+    }
+    jointMeshes[n].position.set(...smooth3D[n]);
+  }
+  BONES.forEach((b,i)=>setBone(boneMeshes[i], smooth3D[b[0]]||pose[b[0]], smooth3D[b[1]]||pose[b[1]]));
+}
+
+/* ============================================================
+   PART 4 — Systems: session, shuffle, timing, music, tracking
+   ============================================================ */
+const SESSION_LENGTH = 85;
+const MOVE_TIME = 6.0;
+let sessionActive=false, sessionStart=0, running=false;
+let move0=null, danceClock=0;
+let speedFactor=1.0;
+const MOTION_BASE=1.0;
+
+const REGION_ORDER = ['India', 'Iran', 'Turkey', 'China', 'Africa', 'Russia', 'Brazil', 'NewZealand', 'Spain', 'Ireland', 'Georgia'];
+function moveRegion(dance) {
+  if (/Bandari|Zār|Zar|Rezif|Sword dance|Choub|Handkerchief dance · Iran|Rowing dance|Persian|Lur/.test(dance)) return 'Iran';
+  if (/Zeybek|Sema|Mevlevi|Azerbaijani|Türkiye|Turkish|Halay|Horon|Kaşık|Kochari|Lezginka|Caucasus|Anatolia|Black Sea|Attan|Afghan|Pashtun/.test(dance)) return 'Turkey';
+  if (/China|Chinese|Yayue|Nuo|Dragon|Lion|Waist drum|Flower Drum|Court dance|Hu Xuan|Peacock|Dai people|Bonfire|Tea-picking|Errenzhuan|Loess/.test(dance)) return 'China';
+  if (/Eskista|Ethiopia|Adumu|Maasai|Azonto|Kpanlogo|Ghana|Indlamu|Zulu|Gumboot|South Africa|Africa/.test(dance)) return 'Africa';
+  if (/Cossack|Russia/.test(dance)) return 'Russia';
+  if (/Samba|Brazil/.test(dance)) return 'Brazil';
+  if (/Haka|New Zealand/.test(dance)) return 'NewZealand';
+  if (/Flamenco|Spain/.test(dance)) return 'Spain';
+  if (/Stepdance|Ireland/.test(dance)) return 'Ireland';
+  if (/Kartuli|Georgia/.test(dance)) return 'Georgia';
+  return 'India';
+}
+// region rotation (reuse the extracted moveRegion + REGION_ORDER from engine)
+let moveOrder=[], orderPos=0, moveIdx=0;
+function shuffleArr(a){ for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
+let idxByRegion=null;
+// Moves a single standing figure can't honestly show (props, groups, floor).
+const SKIP_MOVES = /Circle Walk|Dandiya|Stick Strike|Namaskaram|Shoulder Line|Sword Overhead|Stick Guard|Scarves|Oar Circles|Line Dance|Handkerchief|Story Drum|Mask Stomp|Dragon Body|Lion Pounce|Ansai Drummers|Facing the Circle|Sword|Drum|Boat|Shield|Pole|Bench|Sedan|Bonfire|Fire Walk/i;
+function buildIdx(){ idxByRegion={}; for(const r of REGION_ORDER) idxByRegion[r]=[];
+  DANCE_MOVES.forEach((m,i)=>{ if(SKIP_MOVES.test(m.name)) return; idxByRegion[moveRegion(m.dance)].push(i); }); }
+function makeOrder(){ if(!idxByRegion) buildIdx();
+  // 85s at 5s/move = ~17 moves. Show a FEW countries, each with 2-3 of its
+  // moves in sequence, then move to the next country. Countries chosen and
+  // ordered randomly each session, so every dance is a different tour.
+  const MOVES_PER_SESSION = Math.ceil(SESSION_LENGTH / MOVE_TIME); // ~17
+  const perCountry = 3; // moves shown per country before switching
+  const regions = shuffleArr(REGION_ORDER.filter(r => (idxByRegion[r]||[]).length>0));
+  const pools = {}; for(const r of regions) pools[r] = shuffleArr(idxByRegion[r].slice());
+  const order = [];
+  let ri = 0;
+  while(order.length < MOVES_PER_SESSION && regions.length){
+    const r = regions[ri % regions.length];
+    // take up to `perCountry` moves from this country in a row
+    let taken = 0;
+    while(taken < perCountry && pools[r].length && order.length < MOVES_PER_SESSION){
+      order.push(pools[r].shift()); taken++;
+    }
+    ri++;
+    // stop if we've cycled all regions and none have moves left
+    if(ri > regions.length*3 && order.length===0) break;
+  }
+  // if somehow short, pad from any remaining moves
+  if(order.length < MOVES_PER_SESSION){
+    for(const r of regions){ while(pools[r].length && order.length<MOVES_PER_SESSION) order.push(pools[r].shift()); }
+  }
+  moveOrder=order; orderPos=0; moveIdx=order[0]; }
+
+// music listen (reused, simplified)
+let micActive=false, micCtx=null, micStream=null, micAnalyser=null, micData=null, micRaf=null;
+
+// ---- Built-in energetic dance music (synthesized, offline, loops) ----
+// A driving four-on-the-floor beat with kick, hats, a bassline and a bright
+// pluck melody — upbeat and danceable under any of the dances.
+let musicOn=true, musCtx=null, musTimer=null, musStep=0, musTrack=0;
+const MUS_TRACKS = [
+  { bpm:124, bass:[55,55,82.4,55, 73.4,73.4,55,82.4, 65.4,65.4,98,65.4, 73.4,55,82.4,110],
+             mel:[440,0,554,0, 659,0,554,440, 0,494,0,587, 659,0,554,0], hatDiv:4 },
+  { bpm:110, bass:[49,49,49,73.4, 65.4,65.4,49,98, 55,55,55,82.4, 73.4,49,65.4,49],
+             mel:[523,0,0,494, 587,0,523,0, 659,0,587,0, 494,0,440,0], hatDiv:2 },
+  { bpm:132, bass:[62,62,93,62, 82.4,82.4,62,124, 73.4,73.4,110,73.4, 82.4,62,93,62],
+             mel:[659,0,784,0, 880,0,784,659, 0,740,0,659, 587,0,659,0], hatDiv:4 },
+];
+function startMusic(){
+  if(musCtx) return;
+  try{
+    musCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const T=MUS_TRACKS[musTrack % MUS_TRACKS.length];
+    const bpm=T.bpm, stepDur=60/bpm/4;
+    const master=musCtx.createGain(); master.gain.value=0.5; master.connect(musCtx.destination);
+    const kick=(t)=>{ const o=musCtx.createOscillator(),g=musCtx.createGain();
+      o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+      g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t+0.24); };
+    const hat=(t,open)=>{ const b=musCtx.createBuffer(1,1500,musCtx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,open?2:7);
+      const s=musCtx.createBufferSource(); s.buffer=b; const g=musCtx.createGain(); g.gain.value=open?0.18:0.12;
+      const f=musCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=8000;
+      s.connect(f); f.connect(g); g.connect(master); s.start(t); };
+    const bass=(t,note)=>{ const o=musCtx.createOscillator(),g=musCtx.createGain();
+      o.type='sawtooth'; o.frequency.value=note; const f=musCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=600;
+      g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+stepDur*3.5);
+      o.connect(f); f.connect(g); g.connect(master); o.start(t); o.stop(t+stepDur*4); };
+    const pluck=(t,note)=>{ const o=musCtx.createOscillator(),g=musCtx.createGain();
+      o.type='triangle'; o.frequency.value=note;
+      g.gain.setValueAtTime(0.14,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t+0.2); };
+    const tick=()=>{ if(!musCtx) return; const t=musCtx.currentTime+0.06; const s=musStep%16;
+      master.gain.setTargetAtTime(0.5*musicDuck, musCtx.currentTime, 0.08);
+      if(s%4===0) kick(t);
+      hat(t, s%T.hatDiv===(T.hatDiv-2));
+      bass(t, T.bass[s]);
+      if(T.mel[s]) pluck(t, T.mel[s]);
+      musStep++; musTimer=setTimeout(tick, stepDur*1000); };
+    tick();
+  }catch(e){ musCtx=null; }
+}
+function stopMusic(){ if(musTimer)clearTimeout(musTimer); musTimer=null; if(musCtx){ try{musCtx.close();}catch(e){} musCtx=null; } musStep=0; }
+
+// ---- Voice guide (browser text-to-speech, EN or DE) ----
+let voiceLang='en'; // 'en' or 'de'
+let musicDuck=1;    // multiplier applied to music volume (lowered while speaking)
+function speak(text){
+  if(!text || !('speechSynthesis' in window)) return;
+  try{
+    window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang = voiceLang==='de' ? 'de-DE' : 'en-US';
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+    // pick a matching installed voice if available
+    const vs=window.speechSynthesis.getVoices();
+    const match=vs.find(v=>v.lang && v.lang.toLowerCase().startsWith(voiceLang));
+    if(match) u.voice=match;
+    // duck the music while speaking, restore after
+    musicDuck=0.35;
+    u.onend=()=>{ musicDuck=1; };
+    u.onerror=()=>{ musicDuck=1; };
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+// make sure voices are loaded
+if('speechSynthesis' in window){ window.speechSynthesis.onvoiceschanged=()=>{}; window.speechSynthesis.getVoices(); }
+
+
+let beatEnergy=0, musicPresence=0, beatGapAvg=0.5, lastBeatAt=0, bassAvg=0, musicalPhase=0, beatPulse=0;
+async function startMic(){ try{
+  micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  micCtx=new (window.AudioContext||window.webkitAudioContext)();
+  const src=micCtx.createMediaStreamSource(micStream);
+  micAnalyser=micCtx.createAnalyser(); micAnalyser.fftSize=1024; micAnalyser.smoothingTimeConstant=0.7;
+  src.connect(micAnalyser); micData=new Uint8Array(micAnalyser.frequencyBinCount); micActive=true;
+  const loop=()=>{ if(!micActive)return; micAnalyser.getByteFrequencyData(micData);
+    const binHz=micCtx.sampleRate/micAnalyser.fftSize, bin=hz=>Math.max(1,Math.min(micData.length-1,Math.round(hz/binHz)));
+    let bass=0,nb=0; for(let i=bin(40);i<=bin(180);i++){bass+=micData[i];nb++;} bass/= (nb*255);
+    let sp=0,ns=0; for(let i=bin(300);i<=bin(3400);i++){sp+=micData[i];ns++;} sp/=(ns*255);
+    let hi=0,nh=0; for(let i=bin(5000);i<=bin(12000);i++){hi+=micData[i];nh++;} hi/=(nh*255);
+    const ms=Math.max(0,(bass+hi)-sp*0.9); musicPresence+=(Math.min(1,ms*2.2)-musicPresence)*0.08;
+    const ml=(bass*1.3+hi*0.7)*(0.4+0.6*musicPresence); beatEnergy+=(Math.min(1,ml*2.6)-beatEnergy)*0.15;
+    const now=performance.now()/1000; bassAvg+=(bass-bassAvg)*0.12;
+    if(bass>bassAvg*1.18+0.015 && (now-lastBeatAt)>0.18 && musicPresence>0.15){
+      if(lastBeatAt>0){const gap=now-lastBeatAt; if(gap>0.22&&gap<1.6) beatGapAvg+=(gap-beatGapAvg)*0.2;} lastBeatAt=now; beatPulse=1; }
+    beatPulse*=0.86; micRaf=requestAnimationFrame(loop); };
+  loop();
+}catch(e){ micActive=false; } }
+function stopMic(){ micActive=false; if(micRaf)cancelAnimationFrame(micRaf); if(micStream)micStream.getTracks().forEach(t=>t.stop()); if(micCtx)micCtx.close(); }
+
+function moveEnergy(mv){ const s=(mv.name+' '+mv.text).toLowerCase();
+  if(/jump|kick|stomp|spin|leap|shimmy|split|vibrat|rapid|fast|batter|strike|pop|clap|bounce|whip|explos/.test(s))return 2;
+  if(/still|slow|glide|hold|arch|sway|calm|deliberate|float|gentle|controlled|salut|prayer|bow|weight shift/.test(s))return 0;
+  return 1; }
+function pickForMusic(te){ for(let k=1;k<=moveOrder.length;k++){ const idx=moveOrder[(orderPos+k)%moveOrder.length];
+  if(moveEnergy(DANCE_MOVES[idx])===te){ orderPos=(orderPos+k)%moveOrder.length; return idx; } }
+  orderPos=(orderPos+1)%moveOrder.length; return moveOrder[orderPos]; }
+
+// advance moves + produce a 3D pose
+let lastRevolve=0;
+function current3DPose(now){
+  if(move0===null) move0=now;
+  if(now-move0>=MOVE_TIME){
+    if(micActive && musicPresence>0.18){
+      const fast=beatGapAvg<0.42, slow=beatGapAvg>0.75;
+      let te = (beatEnergy>0.5||fast)?2 : (beatEnergy<0.22||slow)?0 : 1;
+      moveIdx=pickForMusic(te);
+    } else { orderPos=(orderPos+1)%moveOrder.length; moveIdx=moveOrder[orderPos]; }
+    move0=now; showGuideInfo();
+  }
+  // dance clock: slider always applies; mic modulates
+  let dt;
+  if(micActive){ musicalPhase += (1/60)*(1.4+beatEnergy*1.6)*speedFactor + beatPulse*0.12*speedFactor; dt=musicalPhase; }
+  else { dt = now * MOTION_BASE * speedFactor; }
+  const raw = DANCE_MOVES[moveIdx].fn(dt);
+  lastRevolve = lastRevolveCapture; // set by poseFrom via global
+  // GLOBAL LIVELINESS: add gentle whole-body life under every move so even
+  // simple ones read as a real dancing body — subtle knee bounce, weight
+  // sway, and arm follow-through. Kept small so moves stay easy to copy.
+  const bounce = Math.abs(Math.sin(dt*2.6))*0.02;
+  const swayX = Math.sin(dt*1.5)*0.012;
+  for(const k in raw){
+    raw[k] = { x: raw[k].x + swayX, y: raw[k].y };
+  }
+  if(raw.left_knee)  raw.left_knee.y  += bounce;
+  if(raw.right_knee) raw.right_knee.y += bounce*0.7;
+  if(raw.left_hip)   raw.left_hip.y   += bounce*0.5;
+  if(raw.right_hip)  raw.right_hip.y  += bounce*0.5;
+  // subtle arm follow-through if arms are near neutral (not already active)
+  const armIdle = raw.left_wrist && Math.abs(raw.left_wrist.y - (SHY+0.20)) < 0.05;
+  if(armIdle){
+    raw.left_wrist.x  += Math.sin(dt*1.8)*0.02;
+    raw.right_wrist.x += Math.sin(dt*1.8+Math.PI)*0.02;
+  }
+  return pose2Dto3D(raw);
+}
+
+/* ============================================================
+   PART 5 — Camera "YOU" 2D tracking (kept 2D, side-by-side)
+   ============================================================ */
+const video=document.getElementById('video');
+const camCanvas=document.getElementById('camCanvas'); const cctx=camCanvas.getContext('2d');
+const greenCanvas=document.getElementById('greenCanvas'); const gctx=greenCanvas.getContext('2d');
+let detector=null, modelReady=false, camReady=false;
+function loadModelP(){ if(!window.__mp){ window.__mp=(async()=>{ await tf.setBackend('webgl'); await tf.ready();
+  detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}); })(); } return window.__mp; }
+window.addEventListener('load',()=>{ if(window.tf&&window.poseDetection) loadModelP().then(()=>modelReady=true).catch(()=>{}); });
+async function setupCam(){ const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},aspectRatio:{ideal:16/9}},audio:false});
+  video.srcObject=s; await new Promise(r=>{video.onloadedmetadata=()=>{video.play();r();};}); camReady=true; }
+function sizeCam(){ camCanvas.width=camCanvas.clientWidth; camCanvas.height=camCanvas.clientHeight; greenCanvas.width=window.innerWidth; greenCanvas.height=window.innerHeight; }
+const PAIRS=[['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+  ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+  ['left_hip','right_hip'],['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle']];
+let livePose = null; // normalized participant keypoints for 3D mirroring
+let lastSeenAt = 0;  // last time a person was detected (for empty-camera reset)
+async function drawYou(showGreen){
+  const w=camCanvas.width,h=camCanvas.height; cctx.clearRect(0,0,w,h);
+  const vw=video.videoWidth||1280, vh=video.videoHeight||720;
+  // aspect-preserving "cover" fit (like a normal camera filling the screen)
+  const scale=Math.max(w/vw, h/vh);
+  const dw=vw*scale, dh=vh*scale, dx=(w-dw)/2, dy=(h-dh)/2;
+  cctx.save(); cctx.translate(w,0); cctx.scale(-1,1);
+  cctx.drawImage(video, w-dx-dw, dy, dw, dh); cctx.restore();
+  if(detector){ try{ const poses=await detector.estimatePoses(video,{flipHorizontal:false});
+    if(poses[0]){
+      const nk={}; poses[0].keypoints.forEach(p=>{ if(p.score>0.4) nk[p.name]={x:1-p.x/vw, y:p.y/vh}; });
+      livePose = nk;
+      lastSeenAt = performance.now()/1000;
+      if(showGreen){ drawGreenStick(nk, w, h, scale, dx, dy, vw, vh); }
+    } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height); }
+  }catch(e){} }
+}
+
+// Green tracker matching the video's cover-fit position.
+function drawGreenStick(nk, w, h, scale, dx, dy, vw, vh){
+  const gc=greenCanvas, g2=gctx; g2.clearRect(0,0,gc.width,gc.height);
+  const W=gc.width, H=gc.height;
+  // scale factor from cam canvas to green canvas (both full window, so ~1)
+  const kx=W/w, ky=H/h;
+  // map a normalized (mirrored) keypoint to displayed screen position
+  const P=(n)=>{ if(!nk[n])return null;
+    // un-normalize into video px, apply cover scale+offset, mirror
+    const vx=(1-nk[n].x)*vw, vy=nk[n].y*vh;
+    const sx=(w - (dx + vx*scale)); // mirrored x on cam canvas
+    const sy=dy + vy*scale;
+    return {x:sx*kx, y:sy*ky};
+  };
+  const mid=(a,b)=> (a&&b)?{x:(a.x+b.x)/2,y:(a.y+b.y)/2}:(a||b);
+  const ls=P('left_shoulder'),rs=P('right_shoulder'),lh=P('left_hip'),rh=P('right_hip');
+  const neck=mid(ls,rs), hip=mid(lh,rh);
+  const seg=(a,b)=>{ if(!a||!b)return; g2.beginPath(); g2.moveTo(a.x,a.y); g2.lineTo(b.x,b.y); g2.stroke(); };
+  g2.save(); g2.strokeStyle='rgba(34,190,100,0.98)'; g2.lineWidth=5; g2.lineCap='round'; g2.lineJoin='round';
+  seg(neck,hip); seg(ls,rs);
+  seg(ls,P('left_elbow')); seg(P('left_elbow'),P('left_wrist'));
+  seg(rs,P('right_elbow')); seg(P('right_elbow'),P('right_wrist'));
+  seg(lh,rh);
+  seg(lh,P('left_knee')); seg(P('left_knee'),P('left_ankle'));
+  seg(rh,P('right_knee')); seg(P('right_knee'),P('right_ankle'));
+  const nose=P('nose');
+  if(nose&&neck){ seg(nose,neck); g2.beginPath(); g2.arc(nose.x,nose.y,14,0,Math.PI*2); g2.stroke(); }
+  g2.restore();
+}
+
+// Build a 3D pose from the participant's live 2D keypoints (mirror phase).
+function livePoseTo3D(nk){
+  if(!nk) return null;
+  const has=(n)=>nk[n];
+  const g=(n)=> nk[n] ? to3D({x:nk[n].x, y:nk[n].y}) : null;
+  const mid=(a,b)=> (a&&b)?[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2]:(a||b);
+  // MoveNet joint names → our skeleton
+  const ls=g('left_shoulder'), rs=g('right_shoulder'), lh=g('left_hip'), rh=g('right_hip');
+  if(!ls||!rs||!lh||!rh) return null; // need torso to build a figure
+  const P={};
+  P.head = g('nose') || [ (ls[0]+rs[0])/2, ls[1]+0.5, 0 ];
+  P.neck = mid(ls,rs);
+  P.hip = mid(lh,rh);
+  P.chest = [ P.neck[0], (P.neck[1]+P.hip[1])/2, 0 ];
+  P.lShoulder=ls; P.rShoulder=rs;
+  P.lElbow=g('left_elbow')||ls; P.rElbow=g('right_elbow')||rs;
+  P.lHand=g('left_wrist')||P.lElbow; P.rHand=g('right_wrist')||P.rElbow;
+  P.lHipJ=lh; P.rHipJ=rh;
+  P.lKnee=g('left_knee')||lh; P.rKnee=g('right_knee')||rh;
+  P.lFoot=g('left_ankle')||P.lKnee; P.rFoot=g('right_ankle')||P.rKnee;
+  return P;
+}
+
+/* ============================================================
+   PART 6 — UI wiring + main loop
+   ============================================================ */
+const startScreen=document.getElementById('startScreen'), byeScreen=document.getElementById('byeScreen');
+const controlsEl=document.getElementById('controls'), statusEl=document.getElementById('status');
+const guideText=document.getElementById('guideText'), timerEl=document.getElementById('timer');
+const gName=document.getElementById('gName'), gRegion=document.getElementById('gRegion'), gText=document.getElementById('gText');
+const dimEl=document.getElementById('dim'), tapHint=document.getElementById('tapHint');
+const handHint=document.getElementById('handHint');
+const dimCtx=dimEl.getContext('2d');
+function sizeDim(){ dimEl.width=window.innerWidth; dimEl.height=window.innerHeight; }
+// Draw two soft spotlights from the TOP of the screen — natural, feathered.
+function drawSpotlights(){
+  const w=dimEl.width,h=dimEl.height; if(!w) return;
+  dimCtx.clearRect(0,0,w,h);
+  dimCtx.fillStyle='rgba(0,0,0,0.7)'; dimCtx.fillRect(0,0,w,h);
+  dimCtx.globalCompositeOperation='destination-out';
+  // participant spotlight — follows tracked body center
+  let px=w*0.5;
+  if(livePose && livePose.nose) px=livePose.nose.x*w;
+  softBeam(px, w, h);
+  // figure spotlight — follows the 3D figure's screen x
+  const fx = w*0.5 + (POS_X[figurePos]/3.2) * w * 0.5;
+  softBeam(fx, w, h);
+  dimCtx.globalCompositeOperation='source-over';
+}
+// A soft beam that originates at the very top and pools downward, feathered.
+function softBeam(cx, w, h){
+  const topY = -h*0.15;                 // origin above the screen top
+  const r = w*0.26;
+  // radial pool centered lower on the body, very soft edges
+  const cy = h*0.55;
+  const g = dimCtx.createRadialGradient(cx, cy, 0, cx, cy, r*2.2);
+  g.addColorStop(0,   'rgba(0,0,0,1)');
+  g.addColorStop(0.45,'rgba(0,0,0,0.9)');
+  g.addColorStop(0.75,'rgba(0,0,0,0.45)');
+  g.addColorStop(1,   'rgba(0,0,0,0)');
+  dimCtx.fillStyle=g;
+  dimCtx.beginPath(); dimCtx.arc(cx, cy, r*2.2, 0, Math.PI*2); dimCtx.fill();
+  // a faint beam column from the top for the "light from above" feel
+  const beam = dimCtx.createLinearGradient(cx, topY, cx, h);
+  beam.addColorStop(0,   'rgba(0,0,0,0.5)');
+  beam.addColorStop(0.5, 'rgba(0,0,0,0.25)');
+  beam.addColorStop(1,   'rgba(0,0,0,0)');
+  dimCtx.fillStyle=beam;
+  dimCtx.beginPath();
+  dimCtx.moveTo(cx-r*0.25, topY);
+  dimCtx.lineTo(cx+r*0.25, topY);
+  dimCtx.lineTo(cx+r*1.1, h);
+  dimCtx.lineTo(cx-r*1.1, h);
+  dimCtx.closePath(); dimCtx.fill();
+}
+const danceBtn=document.getElementById('tapToDance');
+// figure position buttons
+const posL=document.getElementById('posL'), posC=document.getElementById('posC'), posR=document.getElementById('posR');
+function setPos(p){ figurePos=p; posL.classList.toggle('on',p==='left'); posC.classList.toggle('on',p==='center'); posR.classList.toggle('on',p==='right'); updateFigurePlacement(); }
+posL.onclick=()=>setPos('left'); posC.onclick=()=>setPos('center'); posR.onclick=()=>setPos('right');
+// estimate participant height from tracking → scale the 3D figure to match
+function matchHeight(){
+  if(!livePose) return;
+  const nose=livePose.nose, la=livePose.left_ankle, ra=livePose.right_ankle;
+  const ankle = (la&&ra) ? {y:(la.y+ra.y)/2} : (la||ra);
+  // fall back to hip if ankles not visible, so it still tracks near/far
+  const lowRef = ankle || (livePose.left_hip && livePose.right_hip ? {y:(livePose.left_hip.y+livePose.right_hip.y)/2 + 0.25} : null);
+  if(nose && lowRef){
+    const px = Math.abs(lowRef.y - nose.y); // body span, 0..1 of frame → bigger when closer
+    const target = px * 3.4 / 1.55;
+    // wider range + faster response so moving front/back visibly resizes the figure
+    figureHeightScale += (Math.max(0.55, Math.min(1.8, target)) - figureHeightScale) * 0.18;
+    updateFigurePlacement();
+  }
+}
+function showGuideInfo(){ const m=DANCE_MOVES[moveIdx]; gName.textContent=m.name; gRegion.textContent=m.dance; gText.textContent=m.text;
+  // voice guide: read the instruction in the chosen language
+  const line = (voiceLang==='de' && m.de) ? m.de : m.text;
+  speak(line);
+}
+
+// PHASES: 'idle' (start screen) -> 'mirror' (3D copies you) -> 'teach' (3D teaches)
+let phase = 'idle';
+
+document.getElementById('yesBtn').onclick=async()=>{
+  try {
+    statusEl.style.color='#8f8'; statusEl.textContent='Starting camera…';
+    startScreen.classList.add('hidden'); controlsEl.classList.remove('hidden');
+    // enter mirror phase UI immediately — wait for a person before Tap to Dance
+    phase='mirror';
+    setPos('right'); updateFigurePlacement();
+    tapHint.classList.add('hidden');
+    danceBtn.classList.add('hidden'); danceBtn.textContent='Tap to Dance';
+    if(handHint) handHint.classList.remove('hidden');
+    lastSeenAt=0;
+    running=true;
+    // camera (needs user gesture — this click provides it)
+    if(!camReady){
+      try{ await setupCam(); }catch(e){ statusEl.style.color='#fc6'; statusEl.textContent='Camera blocked — allow camera & reload'; return; }
+    }
+    sizeCam();
+    // model loads in the BACKGROUND — mirroring starts as soon as it's ready,
+    // so the participant isn't left waiting on a loading screen.
+    if(!modelReady){ loadModelP().then(()=>{ modelReady=true; statusEl.textContent=''; }).catch(()=>{ statusEl.style.color='#fc6'; statusEl.textContent='Model load failed'; }); }
+    else statusEl.textContent='';
+  } catch(err){
+    statusEl.style.color='#f88'; statusEl.textContent='Start error: ' + (err && err.message || err);
+  }
+};
+document.getElementById('noBtn').onclick=()=>{};
+// language pick
+const langEN=document.getElementById('langEN'), langDE=document.getElementById('langDE');
+langEN.onclick=()=>{ voiceLang='en'; langEN.classList.add('on'); langDE.classList.remove('on'); };
+langDE.onclick=()=>{ voiceLang='de'; langDE.classList.add('on'); langEN.classList.remove('on'); };
+
+// DANCE button: switch from mirroring to teaching, with spotlight + fresh moves
+danceBtn.onclick=()=>{
+  if(phase!=='mirror') return;
+  phase='teach';
+  sizeDim();
+  dimEl.classList.add('on');
+  tapHint.classList.add('hidden');
+  danceBtn.classList.add('hidden');
+  if(handHint) handHint.classList.add('hidden');
+  guideText.classList.remove('hidden'); timerEl.classList.remove('hidden');
+  makeOrder();        // fresh random moves every time Dance is pressed
+  showGuideInfo();
+  sessionActive=true; sessionStart=performance.now()/1000; move0=null;
+  musTrack=(Math.random()*MUS_TRACKS.length)|0; // different music each session
+  if(musicOn) startMusic();   // built-in energetic beat
+};
+
+const listenBtn=document.getElementById('listenBtn');
+const musicBtn=document.getElementById('musicBtn');
+musicBtn.onclick=()=>{ musicOn=!musicOn; musicBtn.classList.toggle('on',musicOn);
+  musicBtn.textContent = musicOn?'♪ Music':'♪ Muted';
+  if(musicOn){ if(phase==='teach') startMusic(); } else { stopMusic(); } };
+listenBtn.onclick=()=>{ if(!micActive){ startMic(); listenBtn.classList.add('on'); listenBtn.textContent='🎤 Listening'; }
+  else { stopMic(); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen'; } };
+const speedSlider=document.getElementById('speedSlider'), speedVal=document.getElementById('speedVal');
+speedSlider.oninput=()=>{ speedFactor=parseFloat(speedSlider.value); speedVal.textContent=speedFactor.toFixed(1)+'×'; };
+document.getElementById('fsBtn').onclick=()=>{ const el=document.documentElement;
+  if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); } };
+document.getElementById('refreshBtn').onclick=()=>{ location.reload(); };
+
+// Thank-you gesture poses (2D → lifted to 3D). Random each time.
+function farewellPose(t, kind){
+  if(kind==='bow'){
+    // namaskar: hands together at chest, then bend forward
+    const bend = Math.min(1, t/1.2);
+    return poseFrom({
+      left_wrist:{x:CXX-0.02,y:SHY+0.08}, right_wrist:{x:CXX+0.02,y:SHY+0.08},
+      left_elbow:{x:CXX-0.10,y:SHY+0.10}, right_elbow:{x:CXX+0.10,y:SHY+0.10},
+      nose:{x:CXX, y:0.28 + bend*0.14},
+      left_shoulder:{x:CXX-0.09,y:SHY+bend*0.10}, right_shoulder:{x:CXX+0.09,y:SHY+bend*0.10}
+    });
+  } else {
+    // wave: one arm up, hand swinging side to side
+    const sw=Math.sin(t*6)*0.06;
+    return poseFrom({
+      right_wrist:{x:CXX+0.14+sw,y:SHY-0.22}, right_elbow:{x:CXX+0.15,y:SHY-0.05},
+      left_wrist:{x:CXX-0.16,y:SHY+0.20}, left_elbow:{x:CXX-0.15,y:SHY+0.10},
+      nose:{x:CXX, y:0.27}
+    });
+  }
+}
+let farewellKind='bow', farewell0=0;
+function startFarewell(){
+  phase='farewell'; farewell0=performance.now()/1000;
+  farewellKind = Math.random()<0.5 ? 'bow' : 'wave';
+  stopMusic();
+  // figure comes forward (toward viewer) and centers
+  setPos('center');
+  speak(voiceLang==='de' ? 'Danke fürs Mitmachen!' : 'Thank you for dancing!');
+}
+
+function endSession(){ sessionActive=false; stopMic();
+  // instead of ending immediately, play the thank-you gesture first
+  startFarewell();
+  dimEl.classList.remove('on'); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen';
+}
+function goHome(){ running=false; phase='idle';
+  byeScreen.classList.remove('hidden'); setTimeout(()=>location.reload(), 2500); }
+
+function onResize(){ camera.aspect=camW()/camH(); camera.updateProjectionMatrix(); renderer.setSize(camW(),camH()); sizeCam(); sizeDim(); }
+addEventListener('resize', onResize);
+
+let camFrame=0;
+function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
+
+  if(phase==='mirror' || phase==='teach' || phase==='farewell'){
+    // camera + tracking every 2nd frame. Green line stays on you.
+    if((camFrame++ %2)===0) drawYou(true);
+    matchHeight();
+    const tracked = livePose && livePose.left_shoulder && livePose.right_shoulder && (livePose.left_hip||livePose.right_hip);
+
+    if(phase==='mirror'){
+      // Before dancing: require a tracked person. Show "raise your hand" until
+      // found; only then reveal the Tap-to-Dance button.
+      if(handHint) handHint.classList.toggle('hidden', !!tracked);
+      if(tapHint)  tapHint.classList.toggle('hidden', !tracked);
+      if(danceBtn) danceBtn.classList.toggle('hidden', !tracked);
+    }
+
+    // Person-leaves handling: once someone was seen, if the camera goes empty
+    // for a grace period, redirect home. (Longer grace during a dance so a
+    // brief step-away doesn't cut the session.)
+    const grace = (phase==='teach') ? 4 : 8;
+    if(lastSeenAt>0 && (now - lastSeenAt) > grace){
+      sessionActive=false; stopMic(); stopMusic(); dimEl.classList.remove('on'); goHome();
+    }
+  }
+
+  if(phase==='mirror'){
+    // 3D figure copies the participant's live pose (responsive, no lag)
+    figure.rotation.y = 0;
+    const mp = livePoseTo3D(livePose);
+    if(mp) apply3D(mp, true);
+  }
+  else if(phase==='teach' && sessionActive){
+    const remain=SESSION_LENGTH-(now-sessionStart);
+    if(remain<=0){ endSession(); }
+    else{ timerEl.textContent=Math.ceil(remain)+'s';
+      figure.rotation.y=0;
+      const pose=current3DPose(now);
+      if(Math.abs(lastRevolve)>0.02) figure.rotation.y = lastRevolve * 0.9; // orbit turn
+      apply3D(pose);
+      // GRAVITY / WEIGHT: gentle vertical settle on the whole figure, like
+      // weight pressing into the floor — synced to motion energy.
+      const bob = Math.sin(now*3.4)*0.03 - 0.015;
+      figure.position.y = bob;
+      // slight standing angle so the depth (z) is visible to the viewer
+      figure.rotation.x = 0.04;
+      drawSpotlights(); // two soft follow-spotlights
+    }
+  }
+  else if(phase==='farewell'){
+    const ft = now - farewell0;
+    const fwd = Math.min(1, ft/1.0);
+    figure.position.x = POS_X.center;
+    figure.scale.setScalar(figureHeightScale * (1 + fwd*0.35)); // walk forward = grow
+    figure.position.y = 0; figure.rotation.x = 0.04; figure.rotation.y = 0;
+    apply3D(farewellPose(ft, farewellKind), false);
+    drawSpotlights();
+    if(ft > 3.2){ goHome(); }
+  }
+
+  renderer.render(scene,camera);
+}
+loop();
+</script>
+</body>
+</html>
