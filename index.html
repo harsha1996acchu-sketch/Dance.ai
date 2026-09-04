@@ -17,7 +17,7 @@
   #dim { position: absolute; inset: 0; width:100%; height:100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }
   #dim.on { opacity: 1; }
 
-  .brand { position: absolute; top: 22px; left: 26px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; z-index: 6; }
+  .brand { position: absolute; top: 22px; left: 26px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; z-index: 6; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
   #tapHint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 6;
     font-size: 15px; color: #ddd; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 999px; }
   #tapHint.hidden { display: none; }
@@ -39,9 +39,9 @@
   #langCorner .langBtn { padding: 8px 14px; font-size: 13px; backdrop-filter: blur(8px); background: rgba(255,255,255,0.08); }
   #langCorner .langBtn.on { background: rgba(90,200,120,0.85); }
   #guideText { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 6; width: 90%; }
-  #gName { font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; }
-  #gRegion { font-size: 14px; color: #7fd7ff; margin-top: 3px; }
-  #gText { font-size: clamp(13px, 1.4vw, 16px); color: #eee; margin-top: 6px; }
+  #gName { font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; color: #2ecc71; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #gRegion { font-size: 14px; color: #27ae60; margin-top: 3px; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #gText { font-size: clamp(13px, 1.4vw, 16px); color: #2ecc71; margin-top: 6px; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
   #timer { position: absolute; top: 20px; right: 20px; z-index: 6; font-size: 22px; font-weight: 700; }
   #camLabel { position: absolute; top: 16px; left: 16px; z-index: 6; font-size: 13px; color: #cfc; letter-spacing:0.08em; }
 
@@ -81,14 +81,14 @@
     <div id="gName">—</div><div id="gRegion"></div><div id="gText"></div>
   </div>
   <div id="timer" class="hidden"></div>
-  <div id="tapHint">Tap “Dance” to begin — the figure is copying you</div>
-  <div id="handHint" class="hidden">🙋 Raise your hand so the line can find you</div>
+  <div id="tapHint" class="hidden"></div>
+  
   <button id="tapToDance" class="hidden">Tap to Dance</button>
 </div>
 
 <div id="langCorner">
-  <button id="langEN" class="langBtn on">EN</button>
-  <button id="langDE" class="langBtn">DE</button>
+  <button id="langEN" class="langBtn">EN</button>
+  <button id="langDE" class="langBtn on">DE</button>
 </div>
 <div id="controls" class="hidden">
   <span style="opacity:0.6;font-size:11px;">Figure:</span>
@@ -116,29 +116,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-<script type="importmap">
-{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-}}
-</script>
 
 <script>
-// Fallback watchdog: if the 3D module hasn't signaled ready in 8s, tell the user.
+// (Three.js removed — 2D canvas rendering, much lighter)
 window.__moduleReady = false;
-setTimeout(function(){
-  if (!window.__moduleReady) {
-    var s = document.getElementById('status');
-    if (s) { s.classList.remove('hidden'); s.style.color = '#ffcc66';
-      s.textContent = '3D engine did not load — needs internet for Three.js. Check connection or use the 2D version.'; }
-  }
-}, 8000);
 </script>
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+<script>
+// (Three.js removed — now using lightweight 2D canvas rendering)
 window.__moduleReady = true;
-(function(){ var s=document.getElementById('status'); if(s){ s.textContent='Ready — tap Yes to begin'; s.style.color='#8f8'; } })();
+(function(){ var s=document.getElementById('status'); if(s){ s.textContent=''; } })();
 
 // Show any error on screen instead of failing silently.
 window.addEventListener('error', (e) => {
@@ -973,79 +959,73 @@ function pose2Dto3D(p) {
 }
 
 /* ============================================================
-   PART 3 — Three.js 3D figure + scene
+   PART 3 — Lightweight 2D figure (canvas) — replaces Three.js
+   Keeps the same API (apply3D, updateFigurePlacement, figurePos,
+   figureHeightScale) so the rest of the app is unchanged. Much lighter
+   on the CPU/GPU than the 3D engine, so it won't freeze the laptop.
    ============================================================ */
 const three = document.getElementById('three');
-const scene = new THREE.Scene();
-// transparent — the camera feed shows behind the 3D figure
-scene.fog = null;
+// a 2D canvas for the yellow figure, over the camera
+const figCanvas = document.createElement('canvas');
+figCanvas.style.position='absolute'; figCanvas.style.inset='0';
+figCanvas.style.width='100%'; figCanvas.style.height='100%';
+three.appendChild(figCanvas);
+const fx2d = figCanvas.getContext('2d');
+function sizeFig(){ figCanvas.width=window.innerWidth; figCanvas.height=window.innerHeight; }
+sizeFig();
 
-let camW = () => three.clientWidth || window.innerWidth, camH = () => three.clientHeight || window.innerHeight;
-const camera = new THREE.PerspectiveCamera(45, camW()/camH(), 0.1, 100);
-camera.position.set(1.1, 1.5, 6); // slightly off-axis so 3D depth reads
-camera.lookAt(0, 1.0, 0);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setClearColor(0x000000, 0); // transparent
-renderer.setSize(camW(), camH());
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-three.appendChild(renderer.domElement);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1.0, 0);
-controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.minDistance = 3.5; controls.maxDistance = 11;
-controls.enablePan = false;
-controls.enabled = false; // fixed camera; figure turns via its own rotation
-controls.update();
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(3,6,4); scene.add(key);
-const rim = new THREE.DirectionalLight(0x88bbff, 0.55); rim.position.set(-4,3,-3); scene.add(rim);
-const glow = new THREE.PointLight(0xffffff, 0.4); glow.position.set(0, 4, 2); scene.add(glow);
-
-const WHITE = new THREE.MeshStandardMaterial({ color: 0xf5c518, roughness: 0.45, metalness: 0.05 });
-const figure = new THREE.Group(); scene.add(figure);
-// figure placement: default to participant's RIGHT side
 let figurePos = 'right';   // 'left' | 'center' | 'right'
-const POS_X = { left: -2.4, center: 0, right: 2.0 };
-let figureHeightScale = 1; // set from the participant's tracked height
-function updateFigurePlacement(){
-  figure.position.x = POS_X[figurePos];
-  figure.scale.setScalar(figureHeightScale);
-}
+const POS_X = { left: 0.22, center: 0.5, right: 0.78 }; // fraction of screen width
+let figureHeightScale = 1;
+function updateFigurePlacement(){ /* applied at draw time */ }
 
-const JOINTS = ['head','neck','chest','hip','lShoulder','rShoulder','lElbow','rElbow','lHand','rHand','lHipJ','rHipJ','lKnee','rKnee','lFoot','rFoot'];
 const BONES = [['head','neck'],['neck','chest'],['chest','hip'],['neck','lShoulder'],['neck','rShoulder'],
   ['lShoulder','lElbow'],['lElbow','lHand'],['rShoulder','rElbow'],['rElbow','rHand'],
   ['hip','lHipJ'],['hip','rHipJ'],['lHipJ','lKnee'],['lKnee','lFoot'],['rHipJ','rKnee'],['rKnee','rFoot']];
 
-const jointMeshes = {};
-for (const n of JOINTS) {
-  const r = n==='head' ? 0.16 : 0.055;
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r,16,16), WHITE); figure.add(m); jointMeshes[n]=m;
-}
-const boneMeshes = BONES.map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1,12), WHITE); figure.add(m); return m; });
-const UP = new THREE.Vector3(0,1,0);
-function setBone(mesh,a,b){ const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b);
-  const mid=av.clone().add(bv).multiplyScalar(0.5); const dir=bv.clone().sub(av); const len=dir.length()||0.001;
-  mesh.position.copy(mid); mesh.scale.set(1,len,1); mesh.quaternion.setFromUnitVectors(UP,dir.clone().normalize()); }
-// Smoothed joint positions for natural, weighted motion (no robotic snapping).
-const smooth3D = {};
-const SMOOTH3D = 0.18; // lower = heavier/smoother
+// Smoothed joint positions for natural, weighted motion.
+const smoothF = {};
+const SMOOTHF = 0.2;
+// pose comes in as {joint:[x,y,z]} (3D coords from pose2Dto3D). We use x,y
+// only and map to screen. z is ignored (2D), which is what we want now.
 function apply3D(pose, instant){
+  // smooth
   for(const n in pose){
-    if(!jointMeshes[n]) continue;
     const tgt = pose[n];
-    if(instant || !smooth3D[n]){ smooth3D[n] = tgt.slice(); }
+    if(instant || !smoothF[n]){ smoothF[n] = tgt.slice(); }
     else {
-      smooth3D[n][0] += (tgt[0]-smooth3D[n][0])*SMOOTH3D;
-      smooth3D[n][1] += (tgt[1]-smooth3D[n][1])*SMOOTH3D;
-      smooth3D[n][2] += (tgt[2]-smooth3D[n][2])*SMOOTH3D;
+      smoothF[n][0]+=(tgt[0]-smoothF[n][0])*SMOOTHF;
+      smoothF[n][1]+=(tgt[1]-smoothF[n][1])*SMOOTHF;
     }
-    jointMeshes[n].position.set(...smooth3D[n]);
   }
-  BONES.forEach((b,i)=>setBone(boneMeshes[i], smooth3D[b[0]]||pose[b[0]], smooth3D[b[1]]||pose[b[1]]));
+  drawFigure2D(smoothF);
+}
+// world coords: x roughly -3..3, y roughly 0..2 (from the bridge). Map to screen.
+function drawFigure2D(P){
+  const W=figCanvas.width, H=figCanvas.height;
+  fx2d.clearRect(0,0,W,H);
+  // scale so a full figure (~1.9 world units tall) fits nicely; height-matched
+  const baseH = H*0.62*figureHeightScale;      // on-screen figure height in px
+  const unit = baseH/1.9;                        // px per world unit
+  const cx = POS_X[figurePos]*W;
+  const groundY = H*0.9;                          // feet near lower area
+  const sx = (wx)=> cx + wx*unit*0.55;            // world x → screen x
+  const sy = (wy)=> groundY - wy*unit;            // world y → screen y (up = +)
+  const p = (n)=> P[n] ? {x:sx(P[n][0]), y:sy(P[n][1])} : null;
+
+  fx2d.save();
+  fx2d.lineCap='round'; fx2d.lineJoin='round';
+  fx2d.strokeStyle='#f5c518'; fx2d.fillStyle='#f5c518';
+  const limbW = Math.max(4, unit*0.06);
+  fx2d.lineWidth = limbW;
+  fx2d.shadowColor='rgba(0,0,0,0.5)'; fx2d.shadowBlur=6;
+  for(const [a,b] of BONES){ const A=p(a),B=p(b); if(!A||!B) continue;
+    fx2d.beginPath(); fx2d.moveTo(A.x,A.y); fx2d.lineTo(B.x,B.y); fx2d.stroke(); }
+  // joints as small dots
+  for(const n in P){ const q=p(n); if(!q) continue;
+    const r = n==='head' ? unit*0.16 : limbW*0.5;
+    fx2d.beginPath(); fx2d.arc(q.x,q.y,r,0,Math.PI*2); fx2d.fill(); }
+  fx2d.restore();
 }
 
 /* ============================================================
@@ -1159,7 +1139,7 @@ function startMusic(){
 function stopMusic(){ if(musTimer)clearTimeout(musTimer); musTimer=null; if(musCtx){ try{musCtx.close();}catch(e){} musCtx=null; } musStep=0; }
 
 // ---- Voice guide (browser text-to-speech, EN or DE) ----
-let voiceLang='en'; // 'en' or 'de'
+let voiceLang='de'; // 'en' or 'de' — German default
 let musicDuck=1;    // multiplier applied to music volume (lowered while speaking)
 function speak(text){
   if(!text || !('speechSynthesis' in window)) return;
@@ -1281,11 +1261,37 @@ async function drawYou(showGreen){
   if(detector){ try{ const poses=await detector.estimatePoses(video,{flipHorizontal:false});
     if(poses[0]){
       const nk={}; poses[0].keypoints.forEach(p=>{ if(p.score>0.4) nk[p.name]={x:1-p.x/vw, y:p.y/vh}; });
-      livePose = nk;
-      lastSeenAt = performance.now()/1000;
-      if(showGreen){ drawGreenStick(nk, w, h, scale, dx, dy, vw, vh); }
+      // NEAR/FAR filter: measure body size in the frame. A person far away
+      // (7+ ft) appears small; only accept people who are close enough.
+      const near = isPersonNear(nk);
+      if(near){
+        livePose = nk;
+        lastSeenAt = performance.now()/1000;
+        if(showGreen){ drawGreenStick(nk, w, h, scale, dx, dy, vw, vh); }
+      } else {
+        // person detected but too far — ignore, clear the green line
+        livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+      }
     } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height); }
   }catch(e){} }
+}
+
+// True if the tracked person is close enough to the camera (big enough in
+// frame). Uses head-to-hip or shoulder-width as a size proxy. Tune NEAR_MIN
+// up to require people to stand closer, down to allow further away.
+const NEAR_MIN = 0.28; // fraction of frame height the torso must span
+function isPersonNear(nk){
+  const nose=nk.nose, ls=nk.left_shoulder, rs=nk.right_shoulder, lh=nk.left_hip, rh=nk.right_hip;
+  // vertical span from head/shoulders down to hips (normalized 0..1 of frame)
+  let span = 0;
+  const topY = nose ? nose.y : (ls&&rs ? (ls.y+rs.y)/2 : null);
+  const hipY = (lh&&rh) ? (lh.y+rh.y)/2 : (lh||rh ? (lh||rh).y : null);
+  if(topY!=null && hipY!=null) span = Math.abs(hipY - topY);
+  // also consider shoulder width as a backup size cue
+  let shoulderW = 0;
+  if(ls&&rs) shoulderW = Math.abs(ls.x - rs.x);
+  // accept if the body is large enough by either measure
+  return span >= NEAR_MIN || shoulderW >= 0.16;
 }
 
 // Green tracker matching the video's cover-fit position.
@@ -1353,45 +1359,19 @@ const handHint=document.getElementById('handHint');
 const dimCtx=dimEl.getContext('2d');
 function sizeDim(){ dimEl.width=window.innerWidth; dimEl.height=window.innerHeight; }
 // Draw two soft spotlights from the TOP of the screen — natural, feathered.
+// Clean, static soft dim — a gentle vignette that darkens the edges and
+// keeps the center (where you and the figure are) brighter. No tracking,
+// nothing to break — reliable for the exhibition.
 function drawSpotlights(){
   const w=dimEl.width,h=dimEl.height; if(!w) return;
   dimCtx.clearRect(0,0,w,h);
-  dimCtx.fillStyle='rgba(0,0,0,0.7)'; dimCtx.fillRect(0,0,w,h);
-  dimCtx.globalCompositeOperation='destination-out';
-  // participant spotlight — follows tracked body center
-  let px=w*0.5;
-  if(livePose && livePose.nose) px=livePose.nose.x*w;
-  softBeam(px, w, h);
-  // figure spotlight — follows the 3D figure's screen x
-  const fx = w*0.5 + (POS_X[figurePos]/3.2) * w * 0.5;
-  softBeam(fx, w, h);
-  dimCtx.globalCompositeOperation='source-over';
-}
-// A soft beam that originates at the very top and pools downward, feathered.
-function softBeam(cx, w, h){
-  const topY = -h*0.15;                 // origin above the screen top
-  const r = w*0.26;
-  // radial pool centered lower on the body, very soft edges
-  const cy = h*0.55;
-  const g = dimCtx.createRadialGradient(cx, cy, 0, cx, cy, r*2.2);
-  g.addColorStop(0,   'rgba(0,0,0,1)');
-  g.addColorStop(0.45,'rgba(0,0,0,0.9)');
-  g.addColorStop(0.75,'rgba(0,0,0,0.45)');
-  g.addColorStop(1,   'rgba(0,0,0,0)');
+  // soft radial vignette: transparent center → dark edges
+  const g = dimCtx.createRadialGradient(w*0.5, h*0.45, Math.min(w,h)*0.15, w*0.5, h*0.5, Math.max(w,h)*0.75);
+  g.addColorStop(0,   'rgba(0,0,0,0)');
+  g.addColorStop(0.55,'rgba(0,0,0,0.15)');
+  g.addColorStop(1,   'rgba(0,0,0,0.6)');
   dimCtx.fillStyle=g;
-  dimCtx.beginPath(); dimCtx.arc(cx, cy, r*2.2, 0, Math.PI*2); dimCtx.fill();
-  // a faint beam column from the top for the "light from above" feel
-  const beam = dimCtx.createLinearGradient(cx, topY, cx, h);
-  beam.addColorStop(0,   'rgba(0,0,0,0.5)');
-  beam.addColorStop(0.5, 'rgba(0,0,0,0.25)');
-  beam.addColorStop(1,   'rgba(0,0,0,0)');
-  dimCtx.fillStyle=beam;
-  dimCtx.beginPath();
-  dimCtx.moveTo(cx-r*0.25, topY);
-  dimCtx.lineTo(cx+r*0.25, topY);
-  dimCtx.lineTo(cx+r*1.1, h);
-  dimCtx.lineTo(cx-r*1.1, h);
-  dimCtx.closePath(); dimCtx.fill();
+  dimCtx.fillRect(0,0,w,h);
 }
 const danceBtn=document.getElementById('tapToDance');
 // figure position buttons
@@ -1447,7 +1427,11 @@ document.getElementById('yesBtn').onclick=async()=>{
     statusEl.style.color='#f88'; statusEl.textContent='Start error: ' + (err && err.message || err);
   }
 };
-document.getElementById('noBtn').onclick=()=>{};
+document.getElementById('noBtn').onclick=()=>{
+  startScreen.classList.add('hidden');
+  byeScreen.classList.remove('hidden');
+  setTimeout(()=>location.reload(), 2500);
+};
 // language pick
 const langEN=document.getElementById('langEN'), langDE=document.getElementById('langDE');
 langEN.onclick=()=>{ voiceLang='en'; langEN.classList.add('on'); langDE.classList.remove('on'); };
@@ -1523,7 +1507,7 @@ function endSession(){ sessionActive=false; stopMic();
 function goHome(){ running=false; phase='idle';
   byeScreen.classList.remove('hidden'); setTimeout(()=>location.reload(), 2500); }
 
-function onResize(){ camera.aspect=camW()/camH(); camera.updateProjectionMatrix(); renderer.setSize(camW(),camH()); sizeCam(); sizeDim(); }
+function onResize(){ sizeCam(); sizeDim(); sizeFig(); }
 addEventListener('resize', onResize);
 
 let camFrame=0;
@@ -1531,7 +1515,7 @@ function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
 
   if(phase==='mirror' || phase==='teach' || phase==='farewell'){
     // camera + tracking every 2nd frame. Green line stays on you.
-    if((camFrame++ %2)===0) drawYou(true);
+    if((camFrame++ %3)===0) drawYou(true);
     matchHeight();
     const tracked = livePose && livePose.left_shoulder && livePose.right_shoulder && (livePose.left_hip||livePose.right_hip);
 
@@ -1553,8 +1537,7 @@ function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
   }
 
   if(phase==='mirror'){
-    // 3D figure copies the participant's live pose (responsive, no lag)
-    figure.rotation.y = 0;
+    // figure copies the participant's live pose (responsive, no lag)
     const mp = livePoseTo3D(livePose);
     if(mp) apply3D(mp, true);
   }
@@ -1562,33 +1545,36 @@ function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
     const remain=SESSION_LENGTH-(now-sessionStart);
     if(remain<=0){ endSession(); }
     else{ timerEl.textContent=Math.ceil(remain)+'s';
-      figure.rotation.y=0;
       const pose=current3DPose(now);
-      if(Math.abs(lastRevolve)>0.02) figure.rotation.y = lastRevolve * 0.9; // orbit turn
       apply3D(pose);
-      // GRAVITY / WEIGHT: gentle vertical settle on the whole figure, like
-      // weight pressing into the floor — synced to motion energy.
-      const bob = Math.sin(now*3.4)*0.03 - 0.015;
-      figure.position.y = bob;
-      // slight standing angle so the depth (z) is visible to the viewer
-      figure.rotation.x = 0.04;
       drawSpotlights(); // two soft follow-spotlights
     }
   }
   else if(phase==='farewell'){
     const ft = now - farewell0;
     const fwd = Math.min(1, ft/1.0);
-    figure.position.x = POS_X.center;
-    figure.scale.setScalar(figureHeightScale * (1 + fwd*0.35)); // walk forward = grow
-    figure.position.y = 0; figure.rotation.x = 0.04; figure.rotation.y = 0;
+    figurePos = 'center';
+    figureHeightScale = figureHeightScale * (1 + fwd*0.008); // slight grow forward
     apply3D(farewellPose(ft, farewellKind), false);
     drawSpotlights();
     if(ft > 3.2){ goHome(); }
   }
 
-  renderer.render(scene,camera);
+  // (no 3D renderer needed — figure drawn directly to canvas)
 }
 loop();
+
+// ---- Auto-refresh every 45 minutes (memory/heat safety for all-day use) ----
+// Waits until no participant is mid-session, so it never cuts off a dancer.
+const REFRESH_AFTER = 45 * 60 * 1000; // 45 minutes
+const refreshDueAt = Date.now() + REFRESH_AFTER;
+setInterval(() => {
+  if (Date.now() >= refreshDueAt) {
+    // only refresh when idle (on the start screen, no active dance)
+    if (phase === 'idle') location.reload();
+    // if someone is dancing, it waits and refreshes on a later check
+  }
+}, 15000); // check every 15s once the 45-min mark passes
 </script>
 </body>
 </html>
