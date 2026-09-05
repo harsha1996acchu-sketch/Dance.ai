@@ -1592,7 +1592,7 @@ document.getElementById('yesBtn').onclick=async()=>{
 document.getElementById('noBtn').onclick=()=>{
   startScreen.classList.add('hidden');
   byeScreen.classList.remove('hidden');
-  setTimeout(()=>location.reload(), 2500);
+  setTimeout(()=>{ byeScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); }, 2500);
 };
 // language pick
 const langEN=document.getElementById('langEN'), langDE=document.getElementById('langDE');
@@ -1667,8 +1667,29 @@ function endSession(){ sessionActive=false; stopMic();
   startFarewell();
   dimEl.classList.remove('on');
 }
-function goHome(){ running=false; phase='idle';
-  byeScreen.classList.remove('hidden'); setTimeout(()=>location.reload(), 2500); }
+function goHome(){
+  running=false; phase='idle';
+  stopMusic(); stopMic();
+  byeScreen.classList.remove('hidden');
+  // after the thank-you, return to the START (Yes/No) screen without a full
+  // reload — camera stays running so the next person starts instantly.
+  setTimeout(()=>{
+    byeScreen.classList.add('hidden');
+    // reset UI back to the consent/home screen
+    startScreen.classList.remove('hidden');
+    controlsEl.classList.add('hidden');
+    guideText.classList.add('hidden');
+    timerEl.classList.add('hidden');
+    if(danceBtn) danceBtn.classList.add('hidden');
+    dimEl.classList.remove('on');
+    // clear the figure and green line
+    fx2d && fx2d.clearRect(0,0,figCanvas.width,figCanvas.height);
+    gctx && gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+    // reset session state so a fresh dance can begin
+    sessionActive=false; move0=null; smoothF && Object.keys(smoothF).forEach(k=>delete smoothF[k]);
+    setPos('right');
+  }, 2800);
+}
 
 function onResize(){ sizeCam(); sizeDim(); sizeFig(); }
 addEventListener('resize', onResize);
