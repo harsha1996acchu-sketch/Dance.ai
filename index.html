@@ -1318,10 +1318,7 @@ async function drawYou(showGreen){
   const dw=vw*scale, dh=vh*scale, dx=(w-dw)/2, dy=(h-dh)/2;
   cctx.save(); cctx.translate(w,0); cctx.scale(-1,1);
   cctx.drawImage(video, w-dx-dw, dy, dw, dh); cctx.restore();
-  // Fixed "stand here" rectangle on the floor — a perspective trapezoid in the
-  // lower-center, sized so a person standing inside is ~6-7ft from the camera
-  // (the right distance for full-body tracking). Helps in a crowd.
-  drawStandZone(w, h);
+  // (green stand-zone line removed)
   if(detector){ try{ const poses=await detector.estimatePoses(video,{flipHorizontal:false});
     if(poses[0]){
       const nk={}; poses[0].keypoints.forEach(p=>{ if(p.score>0.4) nk[p.name]={x:1-p.x/vw, y:p.y/vh}; });
@@ -1329,18 +1326,13 @@ async function drawYou(showGreen){
       if(dist==='far'){
         // too far — background person, ignore completely
         livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
-        if(stepBackHint) stepBackHint.classList.add('hidden');
       } else {
-        // 'ok' OR 'close': ALWAYS keep tracking and drawing the green line so it
-        // never disappears and confuses people. Just show the reminder message
-        // when they're too close / cut off.
+        // 'ok' OR 'close': always keep tracking and drawing the green line.
         livePose = nk;
         lastSeenAt = performance.now()/1000;
         if(showGreen){ drawGreenStick(nk, w, h, scale, dx, dy, vw, vh); }
-        if(stepBackHint) stepBackHint.classList.toggle('hidden', dist!=='close');
       }
-    } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
-      if(stepBackHint) stepBackHint.classList.add('hidden'); }
+    } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height); }
   }catch(e){} }
 }
 
