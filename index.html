@@ -1668,6 +1668,24 @@ function endSession(){ sessionActive=false; stopMic();
   dimEl.classList.remove('on');
 }
 let goingHome=false;
+// Quiet reset — camera empty, no one there: jump straight back to Tap-to-Dance
+// with no thank-you screen, near-instant.
+function quietReset(){
+  if(goingHome) return; goingHome=true;
+  byeScreen.classList.add('hidden');
+  startScreen.classList.add('hidden');
+  dimEl.classList.remove('on');
+  guideText.classList.add('hidden');
+  timerEl.classList.add('hidden');
+  fx2d && fx2d.clearRect(0,0,figCanvas.width,figCanvas.height);
+  gctx && gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+  sessionActive=false; move0=null; smoothF && Object.keys(smoothF).forEach(k=>delete smoothF[k]);
+  phase='mirror'; setPos('center'); updateFigurePlacement();
+  controlsEl.classList.remove('hidden');
+  if(danceBtn){ danceBtn.classList.remove('hidden'); danceBtn.textContent='Tap to Dance'; }
+  running=true;
+  setTimeout(()=>{ goingHome=false; }, 300);
+}
 function goHome(){
   if(goingHome) return; // prevent multiple triggers
   goingHome=true;
@@ -1716,12 +1734,12 @@ function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
       if(tapHint)  tapHint.classList.add('hidden');
     }
 
-    // Person-leaves handling: once someone was seen, if the camera goes empty
-    // for a grace period, redirect home. (Longer grace during a dance so a
-    // brief step-away doesn't cut the session.)
-    const grace = (phase==='teach') ? 4 : 8;
+    // Person-leaves handling: if the camera goes empty, return to the
+    // Tap-to-Dance screen quickly (no thank-you screen — no one is there).
+    const grace = (phase==='teach') ? 3 : 1.5;
     if(lastSeenAt>0 && (now - lastSeenAt) > grace){
-      sessionActive=false; stopMic(); stopMusic(); dimEl.classList.remove('on'); goHome();
+      sessionActive=false; stopMic(); stopMusic(); dimEl.classList.remove('on');
+      quietReset();
     }
   }
 
