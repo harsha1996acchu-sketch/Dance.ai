@@ -1024,7 +1024,7 @@ const BONES = [['head','neck'],['neck','chest'],['chest','hip'],['neck','lShould
 
 // Smoothed joint positions for natural, weighted motion.
 const smoothF = {};
-const SMOOTHF = 0.2;
+const SMOOTHF = 0.35;
 // pose comes in as {joint:[x,y,z]} (3D coords from pose2Dto3D). We use x,y
 // only and map to screen. z is ignored (2D), which is what we want now.
 function apply3D(pose, instant){
@@ -1087,7 +1087,7 @@ const MOVE_TIME = 6.0;
 let sessionActive=false, sessionStart=0, running=false;
 let move0=null, danceClock=0;
 let speedFactor=1.0;
-const MOTION_BASE=1.0;
+const MOTION_BASE=1.6;
 
 const REGION_ORDER = ['India', 'Iran', 'Turkey', 'China', 'Africa', 'Russia', 'Brazil', 'NewZealand', 'Spain', 'Ireland', 'Georgia'];
 function moveRegion(dance) {
@@ -1262,24 +1262,25 @@ function current3DPose(now){
   else { dt = now * MOTION_BASE * speedFactor; }
   const raw = DANCE_MOVES[moveIdx].fn(dt);
   lastRevolve = lastRevolveCapture; // set by poseFrom via global
-  // GLOBAL LIVELINESS: add gentle whole-body life under every move so even
-  // simple ones read as a real dancing body — subtle knee bounce, weight
-  // sway, and arm follow-through. Kept small so moves stay easy to copy.
-  const bounce = Math.abs(Math.sin(dt*2.6))*0.02;
-  const swayX = Math.sin(dt*1.5)*0.012;
+  // GLOBAL LIVELINESS: add clearly visible whole-body motion under every move
+  // so even simple ones read as a real dancing body — bigger bounce, sway,
+  // and continuous arm motion. Boosted so nothing looks static.
+  const bounce = Math.abs(Math.sin(dt*3.0))*0.05;
+  const swayX = Math.sin(dt*2.0)*0.035;
+  const armWave = Math.sin(dt*2.6)*0.05;
   for(const k in raw){
     raw[k] = { x: raw[k].x + swayX, y: raw[k].y };
   }
   if(raw.left_knee)  raw.left_knee.y  += bounce;
-  if(raw.right_knee) raw.right_knee.y += bounce*0.7;
+  if(raw.right_knee) raw.right_knee.y += bounce*0.6;
   if(raw.left_hip)   raw.left_hip.y   += bounce*0.5;
   if(raw.right_hip)  raw.right_hip.y  += bounce*0.5;
-  // subtle arm follow-through if arms are near neutral (not already active)
-  const armIdle = raw.left_wrist && Math.abs(raw.left_wrist.y - (SHY+0.20)) < 0.05;
-  if(armIdle){
-    raw.left_wrist.x  += Math.sin(dt*1.8)*0.02;
-    raw.right_wrist.x += Math.sin(dt*1.8+Math.PI)*0.02;
-  }
+  if(raw.nose)       raw.nose.y       += bounce*0.4;
+  // continuous gentle arm motion so arms are never frozen
+  if(raw.left_wrist)  raw.left_wrist.x  += armWave;
+  if(raw.right_wrist) raw.right_wrist.x -= armWave;
+  if(raw.left_elbow)  raw.left_elbow.x  += armWave*0.5;
+  if(raw.right_elbow) raw.right_elbow.x -= armWave*0.5;
   return pose2Dto3D(raw);
 }
 
@@ -1444,7 +1445,7 @@ const dimEl=document.getElementById('dim'), tapHint=document.getElementById('tap
 
 // ---- Air-touch control: raised hand → on-screen pointer → hold to click ----
 let airPointer=document.getElementById('airPointer'), airRing=document.getElementById('airRing');
-let airX=0, airY=0, airActive=false;
+let airX=0, airY=0, airActive=false, activeHand=null;
 let dwellTarget=null, dwellStart=0;
 const DWELL_MS=1400; // hold this long over a button to click it
 function updateAirControl(){
@@ -1453,18 +1454,26 @@ function updateAirControl(){
   if(!airRing) airRing=document.getElementById('airRing');
   if(!airPointer) return;
   // find the raised hand: a wrist above its shoulder = intentional pointing
-  if(!livePose){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; return; }
+  if(!livePose){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; activeHand=null; return; }
   const lw=livePose.left_wrist, rw=livePose.right_wrist;
   let hand=null;
-  // Use whichever wrist is detected, at ANY height (no need to raise the hand).
-  // If both are visible, use the higher one (more likely the pointing hand).
-  if(rw && lw) hand = (rw.y < lw.y) ? rw : lw;
-  else hand = rw || lw;
-  if(!hand){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; if(airRing) airRing.classList.remove('fill'); return; }
+  // STICKY hand: once the pointer picks a hand, keep using THAT hand until it
+  // disappears — prevents flickering/jumping between the two hands.
+  if(activeHand==='right' && rw) hand=rw;
+  else if(activeHand==='left' && lw) hand=lw;
+  else {
+    // no locked hand available — pick one (the higher one) and lock to it
+    if(rw && lw){ if(rw.y < lw.y){ hand=rw; activeHand='right'; } else { hand=lw; activeHand='left'; } }
+    else if(rw){ hand=rw; activeHand='right'; }
+    else if(lw){ hand=lw; activeHand='left'; }
+    else activeHand=null;
+  }
+  if(!hand){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; activeHand=null; if(airRing) airRing.classList.remove('fill'); return; }
   airActive=true;
-  // hand.x/y are normalized (mirrored already). Map to screen px.
-  airX = hand.x * window.innerWidth;
-  airY = hand.y * window.innerHeight;
+  // hand.x/y are normalized (mirrored already). Map to screen px, smoothed.
+  const tx = hand.x * window.innerWidth, ty = hand.y * window.innerHeight;
+  airX += (tx - airX) * 0.35;
+  airY += (ty - airY) * 0.35;
   airPointer.classList.remove('hidden');
   airPointer.style.transform = `translate(${airX}px, ${airY}px)`;
   // what's under the pointer? check clickable buttons
