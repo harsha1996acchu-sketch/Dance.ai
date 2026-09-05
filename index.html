@@ -10,9 +10,9 @@
     font-family: -apple-system, "Segoe UI", sans-serif; color: #fff; }
   #app { position: fixed; inset: 0; }
   #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); visibility: hidden; }
-  #camCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+  #camCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
   #greenCanvas { position: absolute; inset: 0; width:100%; height:100%; z-index: 4; pointer-events: none; }
-  #three { position: absolute; inset: 0; z-index: 3; }
+  #three { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
   /* dim overlay + subtle spotlight when dancing */
   #dim { position: absolute; inset: 0; width:100%; height:100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }
   #dim.on { opacity: 1; }
@@ -21,11 +21,28 @@
   #tapHint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 6;
     font-size: 15px; color: #ddd; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 999px; }
   #tapHint.hidden { display: none; }
+  #stepBackHint { position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%); z-index: 8;
+    font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; color: #fff; background: rgba(20,80,40,0.82);
+    padding: 12px 24px; border-radius: 14px; text-align: center; }
+  #stepBackHint.hidden { display: none; }
+  #airPointer { position: fixed; z-index: 2147483647; width: 60px; height: 60px; margin:-30px 0 0 -30px;
+    pointer-events: none; transition: transform 0.05s linear; }
+  #airPointer.hidden { display: none; }
+  #airPointer::before { content:''; position:absolute; inset:20px; border-radius:50%;
+    background: rgba(255,90,90,0.98); box-shadow: 0 0 14px rgba(255,90,90,0.9), 0 0 4px #fff; }
+  #airRing { position:absolute; inset:0; border-radius:50%; border:5px solid rgba(255,255,255,0.9); }
+  #airRing.fill { border-color: rgba(90,220,130,0.95);
+    background: conic-gradient(rgba(90,220,130,0.5) var(--p,0%), transparent 0); }
+  #bootPrompt { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 45;
+    font-size: 20px; font-weight: 700; color: #fff; background: rgba(42,125,82,0.9);
+    padding: 14px 28px; border-radius: 999px; animation: pulse 1.4s ease-in-out infinite; }
+  #bootPrompt.hidden { display: none; }
+  @keyframes pulse { 0%,100%{opacity:0.7;} 50%{opacity:1;} }
   #handHint { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); z-index: 7;
     font-size: 18px; font-weight: 600; color: #fff; background: rgba(20,80,40,0.72);
     padding: 12px 22px; border-radius: 999px; }
   #handHint.hidden { display: none; }
-  #tapToDance { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); z-index: 8;
+  #tapToDance { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 8;
     -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.1);
     color: #fff; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; padding: 18px 48px;
     border-radius: 999px; cursor: pointer; backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
@@ -57,15 +74,17 @@
   .consentBtn.yes { background: #2a7d52; border-color: #2a7d52; }
   #byeScreen h1 { font-size: clamp(28px,4vw,44px); font-weight: 700; }
 
-  #controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 6;
-    display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.15); padding: 9px 13px; border-radius: 999px; backdrop-filter: blur(8px); }
+  #controls { position: absolute; top: 50%; left: 16px; transform: translateY(-50%); z-index: 6;
+    display: flex; flex-direction: column; gap: 10px; align-items: stretch; background: rgba(15,20,17,0.82);
+    border: 1px solid rgba(255,255,255,0.3); padding: 14px 12px; border-radius: 22px; backdrop-filter: blur(10px); }
   #controls.hidden, .hidden { display: none !important; }
-  button.ctl { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
-    color: #fff; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  button.ctl { -webkit-appearance: none; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.16);
+    color: #fff; font-size: 12px; font-weight: 600; padding: 10px 12px; border-radius: 14px; cursor: pointer; white-space: nowrap; }
   button.ctl.on { background: #2a7d52; border-color: #2a7d52; }
-  #speedWrap { display: flex; gap: 8px; align-items: center; font-size: 12px; }
-  #speedSlider { width: 80px; accent-color: #ffc94a; }
+  #speedWrap { display: flex; flex-direction: column; gap: 6px; align-items: center; font-size: 12px; }
+  #speedRow { display: flex; gap: 6px; }
+  .speedBtn { font-size: 11px !important; padding: 8px 10px !important; }
+  #speedSlider { width: 90px; accent-color: #ffc94a; }
   #status { position: absolute; bottom: 62px; left: 50%; transform: translateX(-50%); z-index: 50; font-size: 14px; color:#aaa; text-align:center; max-width:90%; }
 </style>
 </head>
@@ -82,14 +101,11 @@
   </div>
   <div id="timer" class="hidden"></div>
   <div id="tapHint" class="hidden"></div>
+  <div id="stepBackHint" class="hidden">Stand behind the green line</div>
   
   <button id="tapToDance" class="hidden">Tap to Dance</button>
 </div>
 
-<div id="langCorner">
-  <button id="langEN" class="langBtn">EN</button>
-  <button id="langDE" class="langBtn on">DE</button>
-</div>
 <div id="controls" class="hidden">
   <span style="opacity:0.6;font-size:11px;">Figure:</span>
   <button id="posL" class="ctl">Left</button>
@@ -97,8 +113,17 @@
   <button id="posR" class="ctl on">Right</button>
   <button id="refreshBtn" class="ctl">↻ Refresh</button>
   <button id="musicBtn" class="ctl on">♪ Music</button>
-  <button id="listenBtn" class="ctl">🎤 Listen</button>
-  <div id="speedWrap"><span>Speed</span><input id="speedSlider" type="range" min="0.3" max="2.0" step="0.1" value="1"><span id="speedVal">1.0×</span></div>
+  <span style="opacity:0.6;font-size:11px;">Language:</span>
+  <button id="langEN" class="ctl langBtn">English</button>
+  <button id="langDE" class="ctl langBtn on">Deutsch</button>
+  <div id="speedWrap">
+    <span>Speed <span id="speedVal">1.0×</span></span>
+    <div id="speedRow">
+      <button id="speedDown" class="ctl speedBtn">‹ Slower</button>
+      <button id="speedUp" class="ctl speedBtn">Faster ›</button>
+    </div>
+    <input id="speedSlider" type="range" min="0.3" max="2.0" step="0.1" value="1">
+  </div>
   <button id="fsBtn" class="ctl">⛶ Fullscreen</button>
 </div>
 <div id="status"></div>
@@ -132,8 +157,11 @@ window.addEventListener('error', (e) => {
   if (s) { s.classList.remove('hidden'); s.style.color = '#ff8888'; s.textContent = 'Error: ' + (e.message || e.error); }
 });
 window.addEventListener('unhandledrejection', (e) => {
+  const msg = (e.reason && e.reason.message || e.reason || '') + '';
+  // ignore harmless permission/abort messages so they don't clutter the screen
+  if (/permission|abort|notallowed|play\(\)/i.test(msg)) return;
   const s = document.getElementById('status');
-  if (s) { s.classList.remove('hidden'); s.style.color = '#ff8888'; s.textContent = 'Load error: ' + (e.reason && e.reason.message || e.reason); }
+  if (s) { s.classList.remove('hidden'); s.style.color = '#ff8888'; s.textContent = 'Load error: ' + msg; }
 });
 
 /* ============================================================
@@ -945,12 +973,23 @@ function pose2Dto3D(p) {
   const lkZ = kneeZ(p.left_knee, lh), rkZ = kneeZ(p.right_knee, rh);
 
   const lsv=g('left_shoulder',0), rsv=g('right_shoulder',0), lhv=g('left_hip',0), rhv=g('right_hip',0);
-  P.head = g('nose', 0.05);
+  // widen shoulders AND arm joints outward so the figure looks broad-shouldered
+  // like the green tracker (not thin), while hips stay as they are.
+  const cxw = (lsv[0]+rsv[0])/2;
+  const widenX = (v, f) => cxw + (v-cxw)*f;
+  lsv[0] = widenX(lsv[0], 2.4);
+  rsv[0] = widenX(rsv[0], 2.4);
   P.neck = mid(lsv,rsv);
   P.hip = mid(lhv,rhv);
+  // Head sits a FIXED short distance above the neck (not at the raw nose),
+  // so the neck length is always natural — no stretched giraffe neck.
+  const torsoLen = Math.abs(P.neck[1] - P.hip[1]) || 0.5;
+  P.head = [ P.neck[0], P.neck[1] + torsoLen*0.42, 0.05 ];
   P.chest = [ P.neck[0], (P.neck[1]+P.hip[1])/2, chestZ ];
   P.lShoulder=lsv; P.rShoulder=rsv;
-  P.lElbow=g('left_elbow', leZ); P.rElbow=g('right_elbow', reZ);
+  const le=g('left_elbow', leZ), re=g('right_elbow', reZ);
+  le[0]=widenX(le[0],1.6); re[0]=widenX(re[0],1.6);
+  P.lElbow=le; P.rElbow=re;
   P.lHand=g('left_wrist', lwZ); P.rHand=g('right_wrist', rwZ);
   P.lHipJ=lhv; P.rHipJ=rhv;
   P.lKnee=g('left_knee', lkZ); P.rKnee=g('right_knee', rkZ);
@@ -989,9 +1028,10 @@ const SMOOTHF = 0.2;
 // pose comes in as {joint:[x,y,z]} (3D coords from pose2Dto3D). We use x,y
 // only and map to screen. z is ignored (2D), which is what we want now.
 function apply3D(pose, instant){
-  // smooth
+  // smooth (defensive: only handle array joints [x,y,z])
   for(const n in pose){
     const tgt = pose[n];
+    if(!Array.isArray(tgt)) continue;
     if(instant || !smoothF[n]){ smoothF[n] = tgt.slice(); }
     else {
       smoothF[n][0]+=(tgt[0]-smoothF[n][0])*SMOOTHF;
@@ -1004,13 +1044,16 @@ function apply3D(pose, instant){
 function drawFigure2D(P){
   const W=figCanvas.width, H=figCanvas.height;
   fx2d.clearRect(0,0,W,H);
-  // scale so a full figure (~1.9 world units tall) fits nicely; height-matched
-  const baseH = H*0.62*figureHeightScale;      // on-screen figure height in px
-  const unit = baseH/1.9;                        // px per world unit
+  // Fit the FULL figure within the frame with top/bottom margins.
+  // Figure spans ~1.9 world units tall; clamp its on-screen height so head
+  // and feet always stay inside the screen.
+  const hs = Math.max(0.5, Math.min(1.0, figureHeightScale)); // clamp so it never overflows
+  const baseH = H*0.5*hs;                         // smaller so full body fits with margin
+  const unit = baseH/2.05;                        // px per world unit
   const cx = POS_X[figurePos]*W;
-  const groundY = H*0.9;                          // feet near lower area
-  const sx = (wx)=> cx + wx*unit*0.55;            // world x → screen x
-  const sy = (wy)=> groundY - wy*unit;            // world y → screen y (up = +)
+  const groundY = H*0.66;                          // feet well above the bottom edge
+  const sx = (wx)=> cx + wx*unit*0.55;
+  const sy = (wy)=> groundY - wy*unit;
   const p = (n)=> P[n] ? {x:sx(P[n][0]), y:sy(P[n][1])} : null;
 
   fx2d.save();
@@ -1021,10 +1064,18 @@ function drawFigure2D(P){
   fx2d.shadowColor='rgba(0,0,0,0.5)'; fx2d.shadowBlur=6;
   for(const [a,b] of BONES){ const A=p(a),B=p(b); if(!A||!B) continue;
     fx2d.beginPath(); fx2d.moveTo(A.x,A.y); fx2d.lineTo(B.x,B.y); fx2d.stroke(); }
-  // joints as small dots
   for(const n in P){ const q=p(n); if(!q) continue;
-    const r = n==='head' ? unit*0.16 : limbW*0.5;
+    const r = n==='head' ? unit*0.11 : limbW*0.5;
     fx2d.beginPath(); fx2d.arc(q.x,q.y,r,0,Math.PI*2); fx2d.fill(); }
+  // "AI Teacher" label above the figure's head
+  const head = p('head');
+  if(head){
+    fx2d.shadowColor='rgba(0,0,0,0.7)'; fx2d.shadowBlur=8;
+    fx2d.fillStyle='#f5c518';
+    fx2d.font='700 '+Math.max(16,unit*0.14)+'px -apple-system, "Segoe UI", sans-serif';
+    fx2d.textAlign='center';
+    fx2d.fillText('AI', head.x, head.y - unit*0.22);
+  }
   fx2d.restore();
 }
 
@@ -1242,8 +1293,17 @@ let detector=null, modelReady=false, camReady=false;
 function loadModelP(){ if(!window.__mp){ window.__mp=(async()=>{ await tf.setBackend('webgl'); await tf.ready();
   detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}); })(); } return window.__mp; }
 window.addEventListener('load',()=>{ if(window.tf&&window.poseDetection) loadModelP().then(()=>modelReady=true).catch(()=>{}); });
-async function setupCam(){ const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},aspectRatio:{ideal:16/9}},audio:false});
-  video.srcObject=s; await new Promise(r=>{video.onloadedmetadata=()=>{video.play();r();};}); camReady=true; }
+let _camPromise=null;
+function setupCam(){
+  // shared promise — only ever requests the camera ONCE, no matter how many
+  // times it's called (fixes the double permission prompt).
+  if(_camPromise) return _camPromise;
+  _camPromise=(async()=>{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},aspectRatio:{ideal:16/9}},audio:false});
+    video.srcObject=s; await new Promise(r=>{video.onloadedmetadata=()=>{video.play();r();};}); camReady=true;
+  })();
+  return _camPromise;
+}
 function sizeCam(){ camCanvas.width=camCanvas.clientWidth; camCanvas.height=camCanvas.clientHeight; greenCanvas.width=window.innerWidth; greenCanvas.height=window.innerHeight; }
 const PAIRS=[['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
   ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],['left_shoulder','left_hip'],['right_shoulder','right_hip'],
@@ -1258,40 +1318,70 @@ async function drawYou(showGreen){
   const dw=vw*scale, dh=vh*scale, dx=(w-dw)/2, dy=(h-dh)/2;
   cctx.save(); cctx.translate(w,0); cctx.scale(-1,1);
   cctx.drawImage(video, w-dx-dw, dy, dw, dh); cctx.restore();
+  // Fixed "stand here" rectangle on the floor — a perspective trapezoid in the
+  // lower-center, sized so a person standing inside is ~6-7ft from the camera
+  // (the right distance for full-body tracking). Helps in a crowd.
+  drawStandZone(w, h);
   if(detector){ try{ const poses=await detector.estimatePoses(video,{flipHorizontal:false});
     if(poses[0]){
       const nk={}; poses[0].keypoints.forEach(p=>{ if(p.score>0.4) nk[p.name]={x:1-p.x/vw, y:p.y/vh}; });
-      // NEAR/FAR filter: measure body size in the frame. A person far away
-      // (7+ ft) appears small; only accept people who are close enough.
-      const near = isPersonNear(nk);
-      if(near){
+      const dist = personDistance(nk);
+      if(dist==='far'){
+        // too far — background person, ignore completely
+        livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+        if(stepBackHint) stepBackHint.classList.add('hidden');
+      } else {
+        // 'ok' OR 'close': ALWAYS keep tracking and drawing the green line so it
+        // never disappears and confuses people. Just show the reminder message
+        // when they're too close / cut off.
         livePose = nk;
         lastSeenAt = performance.now()/1000;
         if(showGreen){ drawGreenStick(nk, w, h, scale, dx, dy, vw, vh); }
-      } else {
-        // person detected but too far — ignore, clear the green line
-        livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+        if(stepBackHint) stepBackHint.classList.toggle('hidden', dist!=='close');
       }
-    } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height); }
+    } else { livePose = null; gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
+      if(stepBackHint) stepBackHint.classList.add('hidden'); }
   }catch(e){} }
 }
 
 // True if the tracked person is close enough to the camera (big enough in
 // frame). Uses head-to-hip or shoulder-width as a size proxy. Tune NEAR_MIN
 // up to require people to stand closer, down to allow further away.
-const NEAR_MIN = 0.28; // fraction of frame height the torso must span
-function isPersonNear(nk){
+// Draws only the FRONT floor line of the stand zone — a single horizontal
+// guide line near the bottom showing "stand behind this line".
+function drawStandZone(w, h){
+  const cx = w*0.5;
+  const frontY = h*0.92;
+  const frontHalf = w*0.26;
+  cctx.save();
+  cctx.strokeStyle = 'rgba(90,220,130,0.95)';
+  cctx.lineWidth = 5; cctx.lineCap='round';
+  cctx.shadowColor='rgba(0,0,0,0.4)'; cctx.shadowBlur=4;
+  cctx.beginPath();
+  cctx.moveTo(cx-frontHalf, frontY);
+  cctx.lineTo(cx+frontHalf, frontY);
+  cctx.stroke();
+  cctx.restore();
+}
+
+// Distance check returns: 'far' (ignore), 'close' (too close, show step-back),
+// or 'ok' (6-7ft, full body visible, track them).
+const NEAR_MIN = 0.22;  // lower = allows further away (~8-9ft) before dropping
+function personDistance(nk){
   const nose=nk.nose, ls=nk.left_shoulder, rs=nk.right_shoulder, lh=nk.left_hip, rh=nk.right_hip;
-  // vertical span from head/shoulders down to hips (normalized 0..1 of frame)
+  const la=nk.left_ankle, ra=nk.right_ankle;
   let span = 0;
   const topY = nose ? nose.y : (ls&&rs ? (ls.y+rs.y)/2 : null);
   const hipY = (lh&&rh) ? (lh.y+rh.y)/2 : (lh||rh ? (lh||rh).y : null);
   if(topY!=null && hipY!=null) span = Math.abs(hipY - topY);
-  // also consider shoulder width as a backup size cue
-  let shoulderW = 0;
-  if(ls&&rs) shoulderW = Math.abs(ls.x - rs.x);
-  // accept if the body is large enough by either measure
-  return span >= NEAR_MIN || shoulderW >= 0.16;
+  let shoulderW = 0; if(ls&&rs) shoulderW = Math.abs(ls.x - rs.x);
+  // too far: body too small in frame → ignore (people walking in background)
+  if(span < NEAR_MIN && shoulderW < 0.12) return 'far';
+  // too close / cut off: no feet visible OR head near top edge → step back
+  const feetVisible = (la && la.y < 0.98) || (ra && ra.y < 0.98);
+  const headHigh = topY!=null && topY < 0.08;
+  if(!feetVisible || headHigh || span > 0.62) return 'close';
+  return 'ok';
 }
 
 // Green tracker matching the video's cover-fit position.
@@ -1320,7 +1410,11 @@ function drawGreenStick(nk, w, h, scale, dx, dy, vw, vh){
   seg(lh,P('left_knee')); seg(P('left_knee'),P('left_ankle'));
   seg(rh,P('right_knee')); seg(P('right_knee'),P('right_ankle'));
   const nose=P('nose');
-  if(nose&&neck){ seg(nose,neck); g2.beginPath(); g2.arc(nose.x,nose.y,14,0,Math.PI*2); g2.stroke(); }
+  if(nose&&neck){ seg(nose,neck); g2.beginPath(); g2.arc(nose.x,nose.y,14,0,Math.PI*2); g2.stroke();
+    g2.shadowColor='rgba(0,0,0,0.7)'; g2.shadowBlur=8; g2.fillStyle='rgba(34,190,100,0.98)';
+    g2.font='700 22px -apple-system, "Segoe UI", sans-serif'; g2.textAlign='center';
+    g2.fillText('YOU', nose.x, nose.y - 26);
+  }
   g2.restore();
 }
 
@@ -1355,7 +1449,54 @@ const controlsEl=document.getElementById('controls'), statusEl=document.getEleme
 const guideText=document.getElementById('guideText'), timerEl=document.getElementById('timer');
 const gName=document.getElementById('gName'), gRegion=document.getElementById('gRegion'), gText=document.getElementById('gText');
 const dimEl=document.getElementById('dim'), tapHint=document.getElementById('tapHint');
+
+// ---- Air-touch control: raised hand → on-screen pointer → hold to click ----
+let airPointer=document.getElementById('airPointer'), airRing=document.getElementById('airRing');
+let airX=0, airY=0, airActive=false;
+let dwellTarget=null, dwellStart=0;
+const DWELL_MS=1400; // hold this long over a button to click it
+function updateAirControl(){
+  // re-fetch if not found yet (pointer element is late in the DOM), then guard
+  if(!airPointer) airPointer=document.getElementById('airPointer');
+  if(!airRing) airRing=document.getElementById('airRing');
+  if(!airPointer) return;
+  // find the raised hand: a wrist above its shoulder = intentional pointing
+  if(!livePose){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; return; }
+  const lw=livePose.left_wrist, rw=livePose.right_wrist;
+  let hand=null;
+  // Use whichever wrist is detected, at ANY height (no need to raise the hand).
+  // If both are visible, use the higher one (more likely the pointing hand).
+  if(rw && lw) hand = (rw.y < lw.y) ? rw : lw;
+  else hand = rw || lw;
+  if(!hand){ airPointer.classList.add('hidden'); airActive=false; dwellTarget=null; if(airRing) airRing.classList.remove('fill'); return; }
+  airActive=true;
+  // hand.x/y are normalized (mirrored already). Map to screen px.
+  airX = hand.x * window.innerWidth;
+  airY = hand.y * window.innerHeight;
+  airPointer.classList.remove('hidden');
+  airPointer.style.transform = `translate(${airX}px, ${airY}px)`;
+  // what's under the pointer? check clickable buttons
+  const el = document.elementFromPoint(airX, airY);
+  const btn = el && el.closest ? el.closest('button, .ctl, #tapToDance, .consentBtn, .langBtn') : null;
+  if(btn && !btn.classList.contains('hidden')){
+    // speed buttons repeat quickly on hold (adjust point by point); others click once
+    const isSpeed = btn.classList.contains('speedBtn');
+    const dwellNeeded = isSpeed ? 500 : DWELL_MS;
+    if(dwellTarget!==btn){ dwellTarget=btn; dwellStart=performance.now(); }
+    const held = performance.now()-dwellStart;
+    const pct = Math.min(100, held/dwellNeeded*100);
+    airRing.classList.add('fill'); airRing.style.setProperty('--p', pct+'%');
+    if(held>=dwellNeeded){ btn.click();
+      if(isSpeed){ dwellStart=performance.now(); } // keep repeating while held
+      else { dwellTarget=null; airRing.classList.remove('fill'); dwellStart=performance.now()+600; }
+    }
+  } else {
+    dwellTarget=null; airRing.classList.remove('fill');
+  }
+}
+
 const handHint=document.getElementById('handHint');
+const stepBackHint=document.getElementById('stepBackHint');
 const dimCtx=dimEl.getContext('2d');
 function sizeDim(){ dimEl.width=window.innerWidth; dimEl.height=window.innerHeight; }
 // Draw two soft spotlights from the TOP of the screen — natural, feathered.
@@ -1410,7 +1551,7 @@ document.getElementById('yesBtn').onclick=async()=>{
     phase='mirror';
     setPos('right'); updateFigurePlacement();
     tapHint.classList.add('hidden');
-    danceBtn.classList.add('hidden'); danceBtn.textContent='Tap to Dance';
+    danceBtn.classList.remove('hidden'); danceBtn.textContent='Tap to Dance';
     if(handHint) handHint.classList.remove('hidden');
     lastSeenAt=0;
     running=true;
@@ -1454,15 +1595,16 @@ danceBtn.onclick=()=>{
   if(musicOn) startMusic();   // built-in energetic beat
 };
 
-const listenBtn=document.getElementById('listenBtn');
 const musicBtn=document.getElementById('musicBtn');
 musicBtn.onclick=()=>{ musicOn=!musicOn; musicBtn.classList.toggle('on',musicOn);
   musicBtn.textContent = musicOn?'♪ Music':'♪ Muted';
   if(musicOn){ if(phase==='teach') startMusic(); } else { stopMusic(); } };
-listenBtn.onclick=()=>{ if(!micActive){ startMic(); listenBtn.classList.add('on'); listenBtn.textContent='🎤 Listening'; }
-  else { stopMic(); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen'; } };
 const speedSlider=document.getElementById('speedSlider'), speedVal=document.getElementById('speedVal');
-speedSlider.oninput=()=>{ speedFactor=parseFloat(speedSlider.value); speedVal.textContent=speedFactor.toFixed(1)+'×'; };
+function setSpeed(v){ speedFactor=Math.max(0.3, Math.min(2.0, Math.round(v*10)/10));
+  speedSlider.value=speedFactor; speedVal.textContent=speedFactor.toFixed(1)+'×'; }
+speedSlider.oninput=()=>{ setSpeed(parseFloat(speedSlider.value)); };
+document.getElementById('speedDown').onclick=()=>{ setSpeed(speedFactor-0.1); }; // slower, point by point
+document.getElementById('speedUp').onclick=()=>{ setSpeed(speedFactor+0.1); };   // faster, point by point
 document.getElementById('fsBtn').onclick=()=>{ const el=document.documentElement;
   if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
   else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); } };
@@ -1473,20 +1615,20 @@ function farewellPose(t, kind){
   if(kind==='bow'){
     // namaskar: hands together at chest, then bend forward
     const bend = Math.min(1, t/1.2);
-    return poseFrom({
+    return pose2Dto3D(poseFrom({
       left_wrist:{x:CXX-0.02,y:SHY+0.08}, right_wrist:{x:CXX+0.02,y:SHY+0.08},
       left_elbow:{x:CXX-0.10,y:SHY+0.10}, right_elbow:{x:CXX+0.10,y:SHY+0.10},
       nose:{x:CXX, y:0.28 + bend*0.14},
       left_shoulder:{x:CXX-0.09,y:SHY+bend*0.10}, right_shoulder:{x:CXX+0.09,y:SHY+bend*0.10}
-    });
+    }));
   } else {
     // wave: one arm up, hand swinging side to side
     const sw=Math.sin(t*6)*0.06;
-    return poseFrom({
+    return pose2Dto3D(poseFrom({
       right_wrist:{x:CXX+0.14+sw,y:SHY-0.22}, right_elbow:{x:CXX+0.15,y:SHY-0.05},
       left_wrist:{x:CXX-0.16,y:SHY+0.20}, left_elbow:{x:CXX-0.15,y:SHY+0.10},
       nose:{x:CXX, y:0.27}
-    });
+    }));
   }
 }
 let farewellKind='bow', farewell0=0;
@@ -1502,7 +1644,7 @@ function startFarewell(){
 function endSession(){ sessionActive=false; stopMic();
   // instead of ending immediately, play the thank-you gesture first
   startFarewell();
-  dimEl.classList.remove('on'); listenBtn.classList.remove('on'); listenBtn.textContent='🎤 Listen';
+  dimEl.classList.remove('on');
 }
 function goHome(){ running=false; phase='idle';
   byeScreen.classList.remove('hidden'); setTimeout(()=>location.reload(), 2500); }
@@ -1513,18 +1655,21 @@ addEventListener('resize', onResize);
 let camFrame=0;
 function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
 
+  // Home screen: no air control (tap/click Yes with mouse). Air control begins
+  // after Yes, in the mirror/teach phases below.
+
   if(phase==='mirror' || phase==='teach' || phase==='farewell'){
     // camera + tracking every 2nd frame. Green line stays on you.
     if((camFrame++ %3)===0) drawYou(true);
     matchHeight();
+    updateAirControl();
     const tracked = livePose && livePose.left_shoulder && livePose.right_shoulder && (livePose.left_hip||livePose.right_hip);
 
     if(phase==='mirror'){
-      // Before dancing: require a tracked person. Show "raise your hand" until
-      // found; only then reveal the Tap-to-Dance button.
-      if(handHint) handHint.classList.toggle('hidden', !!tracked);
-      if(tapHint)  tapHint.classList.toggle('hidden', !tracked);
-      if(danceBtn) danceBtn.classList.toggle('hidden', !tracked);
+      // Tap to Dance stays visible the whole time (participant may be up close).
+      if(danceBtn) danceBtn.classList.remove('hidden');
+      if(handHint) handHint.classList.add('hidden');
+      if(tapHint)  tapHint.classList.add('hidden');
     }
 
     // Person-leaves handling: once someone was seen, if the camera goes empty
@@ -1576,5 +1721,6 @@ setInterval(() => {
   }
 }, 15000); // check every 15s once the 45-min mark passes
 </script>
+<div id="airPointer" class="hidden"><div id="airRing"></div></div>
 </body>
 </html>
