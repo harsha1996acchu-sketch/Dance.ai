@@ -109,8 +109,8 @@
 <div id="controls" class="hidden">
   <span style="opacity:0.6;font-size:11px;">Figure:</span>
   <button id="posL" class="ctl">Left</button>
-  <button id="posC" class="ctl">Center</button>
-  <button id="posR" class="ctl on">Right</button>
+  <button id="posC" class="ctl on">Center</button>
+  <button id="posR" class="ctl">Right</button>
   <button id="refreshBtn" class="ctl">↻ Refresh</button>
   <button id="musicBtn" class="ctl on">♪ Music</button>
   <span style="opacity:0.6;font-size:11px;">Language:</span>
@@ -1013,7 +1013,7 @@ const fx2d = figCanvas.getContext('2d');
 function sizeFig(){ figCanvas.width=window.innerWidth; figCanvas.height=window.innerHeight; }
 sizeFig();
 
-let figurePos = 'right';   // 'left' | 'center' | 'right'
+let figurePos = 'center';   // 'left' | 'center' | 'right'
 const POS_X = { left: 0.22, center: 0.5, right: 0.78 }; // fraction of screen width
 let figureHeightScale = 1;
 function updateFigurePlacement(){ /* applied at draw time */ }
@@ -1570,7 +1570,7 @@ document.getElementById('yesBtn').onclick=async()=>{
     startScreen.classList.add('hidden'); controlsEl.classList.remove('hidden');
     // enter mirror phase UI immediately — wait for a person before Tap to Dance
     phase='mirror';
-    setPos('right'); updateFigurePlacement();
+    setPos('center'); updateFigurePlacement();
     tapHint.classList.add('hidden');
     danceBtn.classList.remove('hidden'); danceBtn.textContent='Tap to Dance';
     if(handHint) handHint.classList.remove('hidden');
@@ -1667,27 +1667,29 @@ function endSession(){ sessionActive=false; stopMic();
   startFarewell();
   dimEl.classList.remove('on');
 }
+let goingHome=false;
 function goHome(){
+  if(goingHome) return; // prevent multiple triggers
+  goingHome=true;
   running=false; phase='idle';
   stopMusic(); stopMic();
   byeScreen.classList.remove('hidden');
-  // after the thank-you, return to the START (Yes/No) screen without a full
-  // reload — camera stays running so the next person starts instantly.
   setTimeout(()=>{
     byeScreen.classList.add('hidden');
-    // reset UI back to the consent/home screen
-    startScreen.classList.remove('hidden');
-    controlsEl.classList.add('hidden');
+    startScreen.classList.add('hidden'); // skip the consent screen
+    dimEl.classList.remove('on');
     guideText.classList.add('hidden');
     timerEl.classList.add('hidden');
-    if(danceBtn) danceBtn.classList.add('hidden');
-    dimEl.classList.remove('on');
-    // clear the figure and green line
     fx2d && fx2d.clearRect(0,0,figCanvas.width,figCanvas.height);
     gctx && gctx.clearRect(0,0,greenCanvas.width,greenCanvas.height);
-    // reset session state so a fresh dance can begin
     sessionActive=false; move0=null; smoothF && Object.keys(smoothF).forEach(k=>delete smoothF[k]);
-    setPos('right');
+    // go straight back to the Tap-to-Dance (mirror) screen, camera stays on
+    phase='mirror';
+    setPos('center'); updateFigurePlacement();
+    controlsEl.classList.remove('hidden');
+    if(danceBtn){ danceBtn.classList.remove('hidden'); danceBtn.textContent='Tap to Dance'; }
+    running=true;
+    goingHome=false; // ready for the next cycle
   }, 2800);
 }
 
@@ -1744,7 +1746,7 @@ function loop(){ requestAnimationFrame(loop); const now=performance.now()/1000;
     figureHeightScale = figureHeightScale * (1 + fwd*0.008); // slight grow forward
     apply3D(farewellPose(ft, farewellKind), false);
     drawSpotlights();
-    if(ft > 3.2){ goHome(); }
+    if(ft > 3.2){ phase='ending'; goHome(); } // switch phase first so goHome runs once
   }
 
   // (no 3D renderer needed — figure drawn directly to canvas)
